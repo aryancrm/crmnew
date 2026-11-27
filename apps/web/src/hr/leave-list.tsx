@@ -11,8 +11,9 @@ import { type ReactNode, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
+import { useHqNames } from "../team/hq-name";
 import { manilaToday } from "../team/range";
-import { Button, CARD, PageHead, PageState, Problem, Tabs, useAction } from "../ui";
+import { Button, CARD, PageHead, PageState, Problem, Tabs, useAction, useOpenOnPress } from "../ui";
 import { LEAVE_WORDS } from "./attendance-report";
 import { FixLineRow } from "./corrections";
 import { daysWords, FormLineRow, LEAVE_STATUS, LeavePapers, PrintLink, spanWords } from "./my-leave";
@@ -226,6 +227,10 @@ function Line({ line }: { line: LeaveLine }) {
   const action = useAction();
   const [refusing, setRefusing] = useState(false);
   const [note, setNote] = useState("");
+  // The person after their HQ, "TAFT · Marwin Dy"; the whole line opens their month (28 Nov).
+  const { named } = useHqNames();
+  const open = useOpenOnPress();
+  const month = `/hr/attendance/${line.person.id}?month=${line.from.slice(0, 7)}`;
   const status = LEAVE_STATUS[line.status];
   const done = () => queries.invalidateQueries({ queryKey: ["leave"] });
   const post = (path: string, body: unknown) =>
@@ -234,14 +239,14 @@ function Line({ line }: { line: LeaveLine }) {
       await done();
     });
   return (
-    <li className="flex flex-col gap-2 px-4 py-3 lg:flex-row lg:items-start lg:justify-between">
+    <li
+      onClick={open(month)}
+      className="flex cursor-pointer flex-col gap-2 px-4 py-3 hover:bg-slate-50/70 lg:flex-row lg:items-start lg:justify-between"
+    >
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <Link
-            to={`/hr/attendance/${line.person.id}?month=${line.from.slice(0, 7)}`}
-            className="font-semibold text-slate-900 hover:text-emerald-700"
-          >
-            {line.person.name}
+          <Link to={month} className="font-semibold text-slate-900 hover:text-emerald-700">
+            {named(line.person.id, line.person.name)}
           </Link>
           <span className="text-slate-700">{LEAVE_WORDS[line.kind]} leave</span>
           <span className="text-slate-700">{spanWords(line.from, line.to)}</span>
@@ -278,6 +283,8 @@ function Line({ line }: { line: LeaveLine }) {
                 event.preventDefault();
                 void post("decide", { approve: false, note: note || null });
               }}
+              // Writing why not stays here: a press around the box doesn't open the month.
+              onClick={(event) => event.stopPropagation()}
               className="flex items-center gap-2"
             >
               <input

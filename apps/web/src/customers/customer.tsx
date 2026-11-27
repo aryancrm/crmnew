@@ -149,13 +149,13 @@ export function Customer() {
   const buying: [string, ReactNode][] =
     data.totals.orders === 0
       ? [
-          ["prices", <PricesGiven key="prices" customerId={customer.id} />],
+          ["prices", <PricesGiven key="prices" customerId={customer.id} hq={customer.hq} />],
           ["orders", <Orders key="orders" data={data} />],
         ]
       : [
           ["orders", <Orders key="orders" data={data} />],
           ["medicines", <Medicines key="medicines" data={data} />],
-          ["prices", <PricesGiven key="prices" customerId={customer.id} />],
+          ["prices", <PricesGiven key="prices" customerId={customer.id} hq={customer.hq} />],
         ];
   const fieldPart: [string, ReactNode][] = work.field ? [["field", <FieldPanel key="field" data={work.field} />]] : [];
   const casesPart: [string, ReactNode][] =
@@ -183,9 +183,10 @@ export function Customer() {
             <KindBadge tone={KIND_TONE[customer.kind] ?? "slate"}>
               {kind?.label ?? customer.kind}
             </KindBadge>
-            {(customer.channel || customer.area) && (
-              <PlacePill title="The area and channel it belongs to">
-                {[customer.channel, customer.area].filter(Boolean).join(" · ")}
+            {/* Its HQ, never the territory's whole name (28 Nov). */}
+            {(customer.channel || customer.hq) && (
+              <PlacePill title="The channel and HQ it belongs to">
+                {[customer.channel, customer.hq].filter(Boolean).join(" · ")}
               </PlacePill>
             )}
             {/* Management checks a new customer's papers once: said only while it waits (Aryan,
@@ -434,23 +435,15 @@ export function Customer() {
         <div className="flex min-w-0 flex-[1_1_20rem] flex-col gap-4">
           {doctorsFirst && <Doctors data={data} />}
           <SideCard title="Money">
-            <SideRows
-              rows={[
-                ["Bought", peso(totals.bought)],
-                ["Paid", peso(totals.paid), "good"],
-                // Overdue is said in Their buying and What's next already (26 Nov: once is enough).
-                ["Owed now", peso(totals.owed), "strong"],
-                ...(customer.creditLimit
-                  ? ([
-                      [
-                        "Credit left",
-                        peso(creditLeft ?? 0),
-                        (creditLeft ?? 0) <= 0 ? "bad" : undefined,
-                      ],
-                    ] as [ReactNode, ReactNode, "bad" | undefined][])
-                  : []),
-              ]}
-            />
+            {/* Bought, paid and owed are Their buying's figures (this CRM's and the earlier
+                system's together), and credit left is in the box at the top: said once, not again
+                here with this CRM's alone (28 Nov: ₱3.8M bought there, ₱0 here). A patient's head
+                box has no credit left, so theirs stays. */}
+            {patient && customer.creditLimit ? (
+              <SideRows
+                rows={[["Credit left", peso(creditLeft ?? 0), (creditLeft ?? 0) <= 0 ? "bad" : undefined]]}
+              />
+            ) : null}
             <Link
               to={`/customers/${customer.id}/statement`}
               className="mt-2 block w-full rounded-lg border border-slate-200 px-3 py-1.5 text-center text-xs font-semibold text-slate-700 hover:bg-slate-50"
@@ -878,11 +871,14 @@ function Details({ data }: { data: CustomerPage }) {
     ["Email", customer.email],
     ["Address", customer.address],
     ["City", customer.city],
+    // Its HQ, never the territory's whole name (28 Nov).
     [
-      "Area",
-      customer.area
-        ? `${customer.area}${customer.channel ? ` · ${customer.channel}` : ""}`
-        : "No area",
+      "HQ",
+      customer.hq
+        ? `${customer.hq}${customer.channel ? ` · ${customer.channel}` : ""}`
+        : customer.area
+          ? customer.channel
+          : "No HQ",
     ],
     ["MedRep", customer.medrep],
     ["Specialty", customer.specialty],

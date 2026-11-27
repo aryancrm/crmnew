@@ -10,6 +10,7 @@ import { addDays, EXPIRING_DAYS, todayManila } from "../inventory/rules";
 import { clean, day, iso, type Runner } from "../inventory/service";
 import { inForce } from "../org/service";
 import { careGroupDoctors } from "../rx/groups";
+import { hqOf } from "../team/hq-name";
 import type { Role } from "../people/roles";
 import { bytesOf, keepFile } from "../files/store";
 import { formatPhone } from "../phone";
@@ -178,9 +179,39 @@ const SORTS: Record<string, (today: string) => SQL> = {
   quiet: () => sql`${lastOrderOf} asc nulls first, lower(c.name), c.id`,
 };
 
-/** Who holds the customer's area today. */
-const holder = sql`(select string_agg(p.name, ', ' order by p.name) from person p
-  where p.area_id = c.area_id and p.role = 'medrep' and p.active)`;
+/** A holding (alias) in force today in Manila. */
+const heldToday = (alias: string) =>
+  sql.raw(`${alias}.starts_on <= (now() at time zone 'Asia/Manila')::date
+    and (${alias}.ends_on is null or ${alias}.ends_on >= (now() at time zone 'Asia/Manila')::date)`);
+
+/** The seat that holds a customer's (alias `c`) area (one seat holds an area), and who sits in it
+ *  today: on a handover day the one who starts, as an order's seat counts. */
+const areaSeat = sql`(select s.id from seat s where s.area_id = c.area_id and s.active limit 1)`;
+const areaSeatHolder = sql`(select h.person_id from seat_holder h join person hp on hp.id = h.person_id and hp.active
+  where h.seat_id = ${areaSeat} and h.kind = 'holder' and ${heldToday("h")}
+  order by h.starts_on desc, h.id desc limit 1)`;
+
+/** Who looks after a customer today: whoever holds the seat of their area, their HQ's person, as
+ *  Collections names the seller (Aryan, 28 Nov; nobody while the seat is empty). Only an area no
+ *  seat holds goes by the MedReps given that area, as before. */
+const holder = sql`(case when ${areaSeat} is not null
+  then (select p.name from person p where p.id = ${areaSeatHolder})
+  else (select string_agg(p.name, ', ' order by p.name) from person p
+    where p.area_id = c.area_id and p.role = 'medrep' and p.active) end)`;
+
+/** Whom that person reports to: the customer is "under" them too. */
+const holderBoss = sql`(case when ${areaSeat} is not null
+  then (select m.name from person p join person m on m.id = p.reports_to where p.id = ${areaSeatHolder})
+  else (select m.name from person p join person m on m.id = p.reports_to
+    where p.area_id = c.area_id and p.role = 'medrep' and p.active order by p.name limit 1) end)`;
+
+/** Whether a lead's own seat holds the customer's area: a lead's seat is no HQ (a lead shows by
+ *  name, as Collections and the order cards do). */
+const leadArea = sql`exists (select 1 from seat s where s.area_id = c.area_id and s.active and s.lead)`;
+
+/** The HQ a customer belongs to: their territory's (TAFT, ON SITE), never its whole name. */
+const hqOfCustomer = (row: { area: string | null; medrep: string | null; leadArea: boolean }) =>
+  row.area && !row.leadArea ? hqOf(row.area, row.medrep) : null;
 
 /** Who looks after each customer (alias `c`): their area's MedRep (`u`), else, for a patient
  * with no area, whoever works their latest enquiry (`d`). `under` is that person's id. */
@@ -193,13 +224,23 @@ const shownChannel = (person: SQL, code: SQL): SQL => sql`(case when ${code} = '
     order by (dh.kind = 'holder') desc, ds.lead desc, dh.starts_on, dh.id limit 1), ${code}) end)`;
 
 const lookedAfter = sql`
-  -- Each area's MedRep worked out once (the first by name, as before), and each customer's latest
+  -- Each area's keeper worked out once: whoever holds its seat today (28 Nov, as "holder"), or, for
+  -- an area no seat holds, its MedRep (the first by name, as before); and each customer's latest
   -- enquiry with an owner worked out once, then both matched to the customers; the enquiry's owner
   -- counts only for a customer with no MedRep. The same answer as asking both for every one of
   -- 90,000 customers, one at a time (22 Nov).
-  left join (select distinct on (p.area_id) p.area_id, p.id, p.name, ch.code as channel, pa.name as area from person p
-      left join channel ch on ch.id = p.channel_id left join area pa on pa.id = p.area_id
-    where p.area_id is not null and p.role = 'medrep' and p.active order by p.area_id, p.name) u on u.area_id = c.area_id
+  left join (select distinct on (k.area_id) k.area_id, k.id, k.name, k.channel, k.area from (
+      select s.area_id, p.id, p.name, ch.code as channel, pa.name as area, 0 as rank, h.starts_on, h.id as holding
+        from seat s join seat_holder h on h.seat_id = s.id and h.kind = 'holder' and ${heldToday("h")}
+          join person p on p.id = h.person_id and p.active
+          left join channel ch on ch.id = p.channel_id left join area pa on pa.id = s.area_id
+        where s.active and s.area_id is not null
+      union all
+      select p.area_id, p.id, p.name, ch.code, pa.name, 1, null::date, null::bigint from person p
+          left join channel ch on ch.id = p.channel_id left join area pa on pa.id = p.area_id
+        where p.area_id is not null and p.role = 'medrep' and p.active
+          and not exists (select 1 from seat s where s.area_id = p.area_id and s.active)
+    ) k order by k.area_id, k.rank, k.starts_on desc nulls last, k.holding desc nulls last, k.name) u on u.area_id = c.area_id
   left join (select distinct on (l.customer_id) l.customer_id, p.id, p.name, ch.code as channel from lead l join person p on p.id = l.assigned_to
       left join channel ch on ch.id = p.channel_id
     where l.customer_id is not null order by l.customer_id, l.first_contact_at desc) d on d.customer_id = c.id and u.id is null`;
@@ -236,9 +277,12 @@ export async function listCustomers(
   for (const word of words) {
     const like = `%${word.replace(/[%_\\]/g, "\\$&")}%`;
     const digits = word.replace(/\D/g, "");
+    // A doctor is found by their PRC licence number too, typed with or without the zeros in front.
+    const prc = prcKey(word);
     conditions.push(
       digits.length >= 4
-        ? sql`(lower(c.name) like ${like} or c.phone_key like ${`%${digits.slice(-10)}%`} or lower(c.code) like ${like})`
+        ? sql`(lower(c.name) like ${like} or c.phone_key like ${`%${digits.slice(-10)}%`} or lower(c.code) like ${like}
+               ${prc ? sql`or (c.kind = 'doctor' and ${prcOf(sql`c.licence_no`)} like ${`%${prc}%`})` : sql``})`
         : sql`(lower(c.name) like ${like} or lower(coalesce(c.city, '')) like ${like} or lower(c.code) like ${like}
                or lower(coalesce(c.specialty, '')) like ${like})`,
     );
@@ -251,14 +295,14 @@ export async function listCustomers(
     ? sql`c.active and ${seen(me)} and c.kind = ${filter.kind}`
     : sql`c.active and ${seen(me)}`;
   const [list, counted, byKind, byRep, summary] = await Promise.all([
-    rows<CustomerRow>(
+    rows<Omit<CustomerRow, "hq"> & { leadArea: boolean }>(
       db,
       sql`${team(me)}
           select c.id::int as id, c.code, c.kind, c.name, c.phone, c.city, a.name as area, ${holder} as medrep,
+            ${leadArea} as "leadArea", case when c.kind = 'doctor' then c.licence_no end as prc,
             c.specialty, h.name as "worksAt", c.review,
-            -- Whom the area's MedRep reports to: the customer is "under" them too.
-            (select m.name from person p join person m on m.id = p.reports_to
-              where p.area_id = c.area_id and p.role = 'medrep' and p.active order by p.name limit 1) as manager,
+            -- Whom the person looking after them reports to: the customer is "under" them too.
+            ${holderBoss} as manager,
             -- A patient with no area is looked after by whoever works their latest enquiry.
             (select a2.name from lead l join person a2 on a2.id = l.assigned_to
               where l.customer_id = c.id order by l.first_contact_at desc limit 1) as "deskOwner",
@@ -313,7 +357,7 @@ export async function listCustomers(
     total: counted[0]?.count ?? 0,
     page,
     pageSize: PAGE_SIZE,
-    rows: list,
+    rows: list.map(({ leadArea: lead, ...row }) => ({ ...row, hq: hqOfCustomer({ ...row, leadArea: lead }) })),
     byRep: byRep.filter((row) => !row.none).map(({ none: _none, ...row }) => row),
     unassigned: byRep.find((row) => row.none)?.count ?? 0,
     summary: summary[0] ?? { all: 0, toCheck: 0, orderedThisMonth: 0, neverOrdered: 0 },
@@ -323,10 +367,10 @@ export async function listCustomers(
 export async function customerDetail(db: Database, me: Me, id: number): Promise<CustomerDetail> {
   const today = todayManila();
   const [found, doctors, areas, papers] = await Promise.all([
-    rows<CustomerDetail["customer"] & { licenceExpires: string | null }>(
+    rows<Omit<CustomerDetail["customer"], "hq"> & { licenceExpires: string | null; leadArea: boolean }>(
       db,
       sql`${team(me)}
-          select c.id::int as id, c.code, c.kind, c.name, c.phone, c.email, c.address, c.city,
+          select c.id::int as id, c.code, c.kind, c.name, c.phone, c.email, c.address, c.city, ${leadArea} as "leadArea",
             c.specialty, c.works_at::int as "worksAtId", h.name as "worksAt",
             c.licence_no as "licenceNo", ${day("c.licence_expires")} as "licenceExpires", c.tin, c.note,
             c.licence_owner as "licenceOwner", c.lto_type as "ltoType", ${day("c.licence_issued")} as "licenceIssued",
@@ -371,8 +415,9 @@ export async function customerDetail(db: Database, me: Me, id: number): Promise<
         where f.customer_id = ${id} and f.active order by f.at, f.id`,
     ),
   ]);
-  const customer = found[0];
-  if (!customer) throw new Refusal(404, "not_found", "No such customer, or it isn't one of yours.");
+  const [row] = found;
+  if (!row) throw new Refusal(404, "not_found", "No such customer, or it isn't one of yours.");
+  const { leadArea: lead, ...customer } = row;
   const standing = await standingOf(db, id, customer.kind);
   const expires = customer.licenceExpires;
   const licenceState = !customer.licenceNo
@@ -387,7 +432,8 @@ export async function customerDetail(db: Database, me: Me, id: number): Promise<
     today,
     kinds: CUSTOMER_KINDS,
     areas,
-    customer: { ...customer, licenceState },
+    // The HQ it belongs to, shown in place of the territory's whole name (28 Nov).
+    customer: { ...customer, licenceState, hq: hqOfCustomer({ ...customer, leadArea: lead }) },
     doctors,
     standing,
     papers: papers.map((paper) => ({ ...paper, kindLabel: CUSTOMER_PAPER_LABEL[paper.kind] })),

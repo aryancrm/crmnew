@@ -11,8 +11,10 @@ import { api } from "../api";
 import { hours } from "./parts";
 import { Ring } from "../team/charts";
 import { manilaToday, RangePicker, short } from "../team/range";
-import { CARD, PageHead, PageState } from "../ui";
+import { CARD, PageHead, PageState, useOpenOnPress } from "../ui";
 import { EmptyState, NoResults } from "../no-results";
+import { counted } from "../ceo";
+import { useHqNames } from "../team/hq-name";
 
 export const LEAVE_WORDS: Record<LeaveKind, string> = {
   vl: "Vacation",
@@ -53,6 +55,9 @@ export function AttendanceReportPage() {
     placeholderData: (previous) => previous,
   });
   const [q, setQ] = useState("");
+  // Each person after their HQ, "TAFT · Marwin Dy" (28 Nov); the whole row opens their month.
+  const { named, hqOf } = useHqNames();
+  const open = useOpenOnPress();
   const data = query.data;
   if (!data) return <PageState query={query} what="the attendance report" />;
   const t = data.totals;
@@ -60,7 +65,7 @@ export function AttendanceReportPage() {
   const words = q.trim().toLowerCase();
   const order = SORTS.find((one) => one.key === sort) ?? (SORTS[0] as (typeof SORTS)[number]);
   const rows = data.people
-    .filter((one) => !words || `${one.name} ${one.team ?? ""}`.toLowerCase().includes(words))
+    .filter((one) => !words || `${one.name} ${hqOf(one.personId) ?? ""} ${one.team ?? ""}`.toLowerCase().includes(words))
     .sort(order.by);
   const leaveByKind = (["vl", "sl", "lwop", "other"] as LeaveKind[])
     .map(
@@ -79,7 +84,7 @@ export function AttendanceReportPage() {
     <div className={`flex flex-col gap-4 ${query.isPlaceholderData ? "opacity-60" : ""}`}>
       <PageHead
         title="Attendance report"
-        sub={`${data.from === data.to ? short(data.from) : `${short(data.from)} – ${short(data.to)}`} · ${t.people} people`}
+        sub={`${data.from === data.to ? short(data.from) : `${short(data.from)} – ${short(data.to)}`} · ${counted(t.people, "person", "people")}`}
       >
         <RangePicker />
       </PageHead>
@@ -94,7 +99,7 @@ export function AttendanceReportPage() {
           <div className="min-w-0">
             <div className="text-xs font-semibold text-slate-500">Came in</div>
             <div className="mt-1 text-sm text-slate-700">
-              {t.present} of {days(askedDays)} working days
+              {t.present} of {days(askedDays)} working {askedDays === 1 ? "day" : "days"}
             </div>
             <div className="text-xs text-slate-400">leave days left out</div>
           </div>
@@ -120,7 +125,7 @@ export function AttendanceReportPage() {
           <div className="text-xs font-semibold text-slate-500">Came late</div>
           <div className="mt-1 text-2xl font-semibold text-amber-700 tabular-nums">
             {t.lateDays}
-            <span className="text-sm font-medium text-slate-500"> times</span>
+            <span className="text-sm font-medium text-slate-500"> {t.lateDays === 1 ? "time" : "times"}</span>
           </div>
           <div className="mt-1 text-xs text-slate-500">{hours(t.lateMinutes)} late in all</div>
         </div>
@@ -190,13 +195,13 @@ export function AttendanceReportPage() {
               {rows.map((one) => {
                 const filled = share(one);
                 return (
-                  <tr key={one.personId} className="hover:bg-slate-50/70">
+                  <tr key={one.personId} onClick={open(month(one))} className="cursor-pointer hover:bg-slate-50/70">
                     <td className="px-4 py-2.5">
                       <Link
                         to={month(one)}
                         className="font-semibold text-slate-900 hover:text-emerald-700"
                       >
-                        {one.name}
+                        {named(one.personId, one.name)}
                       </Link>
                       <div className="text-xs text-slate-500">
                         {[one.title, one.team].filter(Boolean).join(" · ")}
@@ -239,7 +244,7 @@ export function AttendanceReportPage() {
                       className={`px-3 py-2.5 text-right tabular-nums ${one.overtimeMinutes ? "text-emerald-700" : "text-slate-400"}`}
                       title={
                         one.formDays
-                          ? `${one.formDays} days of official business or work from home`
+                          ? `${counted(one.formDays, "day")} of official business or work from home`
                           : undefined
                       }
                     >

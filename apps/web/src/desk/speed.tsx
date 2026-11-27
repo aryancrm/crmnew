@@ -13,6 +13,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { EmptyState } from "../no-results";
 import { Lines, Ring } from "../team/charts";
+import { useHqNames } from "../team/hq-name";
 import { RangePicker, short } from "../team/range";
 import { PageState } from "../ui";
 
@@ -156,6 +157,8 @@ export function SpeedPage() {
     placeholderData: (previous) => previous,
     refetchInterval: 60_000,
   });
+  // A seller named after their HQ first, "TAFT · Marwin Dy" (28 Nov); a desk's people by name.
+  const { named } = useHqNames();
   const data = query.data;
   if (!data) return <PageState query={query} what="how fast orders move" />;
   // A step card picked (?step=) shows that desk's people only: who takes how long there.
@@ -273,8 +276,11 @@ export function SpeedPage() {
                           className="grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)_auto] items-center gap-3 text-[13px]"
                         >
                           <span className="min-w-0">
-                            <span className="block truncate font-medium text-slate-800">
-                              {person.name}
+                            <span
+                              className="block truncate font-medium text-slate-800"
+                              title={named(person.personId, person.name)}
+                            >
+                              {named(person.personId, person.name)}
                               {group.people.length > 1 && n === 0 && (
                                 <span className="ml-1 text-[10px] font-semibold text-rose-600">
                                   slowest

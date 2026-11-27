@@ -13,6 +13,7 @@ import { todayManila } from "../inventory/rules";
 import { day, iso } from "../inventory/service";
 import { LEAD_READ_ROLES } from "../online/rules";
 import { STATUS_LABEL } from "../orders/rules";
+import { inForce } from "../org/service";
 import { pointsByPhone } from "../points/service";
 import type { CustomerPage, Me, OrderStatus, PaymentMethod, PaymentTerms } from "../types";
 import { refillOf } from "./reorders";
@@ -153,16 +154,22 @@ export async function customerPage(db: Database, me: Me, id: number): Promise<Cu
         where o.customer_id = ${id}
         order by e.at desc, e.id desc limit 40`,
       ),
-      // Who looks after them first: the MedRep holding their area, else whoever works their latest
+      // Who looks after them first: whoever holds the seat of their area today, their HQ's person,
+      // as the list's "Under" (28 Nov; nobody while that seat is empty). Only an area no seat holds
+      // (or none) goes as before: the MedRep given their area, else whoever works their latest
       // enquiry, else the MedRep of their latest order, else whoever added them.
-      rows<{ id: number }>(
+      rows<{ id: number | null }>(
         db,
-        sql`select coalesce(
-          (select p.id from person p where p.area_id = ${base?.areaId ?? null} and p.role = 'medrep' and p.active order by p.name limit 1),
-          (select l.assigned_to from lead l where ${sameCases} and l.assigned_to is not null order by l.first_contact_at desc limit 1),
-          (select o.medrep_id from sales_order o where o.customer_id = ${id} and o.status <> 'draft' order by o.created_at desc limit 1),
-          ${base?.addedBy ?? null}::bigint
-        )::int as id`,
+        sql`select (case when exists (select 1 from seat s where s.area_id = ${base?.areaId ?? null} and s.active)
+          then (select h.person_id from seat s join seat_holder h on h.seat_id = s.id and h.kind = 'holder' and ${inForce("h", today)}
+              join person hp on hp.id = h.person_id and hp.active
+            where s.area_id = ${base?.areaId ?? null} and s.active order by h.starts_on desc, h.id desc limit 1)
+          else coalesce(
+            (select p.id from person p where p.area_id = ${base?.areaId ?? null} and p.role = 'medrep' and p.active order by p.name limit 1),
+            (select l.assigned_to from lead l where ${sameCases} and l.assigned_to is not null order by l.first_contact_at desc limit 1),
+            (select o.medrep_id from sales_order o where o.customer_id = ${id} and o.status <> 'draft' order by o.created_at desc limit 1),
+            ${base?.addedBy ?? null}::bigint
+          ) end)::int as id`,
       ),
     ]);
 

@@ -581,8 +581,13 @@ export type CustomerRow = {
   phone: string | null;
   city: string | null;
   area: string | null;
-  /** Who holds the customer's area today. */
+  /** The HQ the customer belongs to (TAFT, ON SITE): their territory's, never its whole name; none
+   *  without a territory, or for a lead's own (28 Nov). */
+  hq: string | null;
+  /** Who holds the seat of the customer's area today (an area no seat holds: its MedReps). */
   medrep: string | null;
+  /** A doctor's PRC licence number, when on file. */
+  prc: string | null;
   specialty: string | null;
   worksAt: string | null;
   review: "ok" | "to_review";
@@ -674,6 +679,8 @@ export type CustomerDetail = {
     worksAtId: number | null;
     worksAt: string | null;
     area: string | null;
+    /** The HQ it belongs to (TAFT, ON SITE), shown in place of the territory's whole name (28 Nov). */
+    hq: string | null;
     channel: string | null;
     medrep: string | null;
     review: "ok" | "to_review";

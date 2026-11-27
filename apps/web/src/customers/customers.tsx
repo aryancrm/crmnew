@@ -17,6 +17,7 @@ import { seatWords } from "../seat-words";
 import { Button, count, dayLabel, PageState, manilaDay } from "../ui";
 import { Figure } from "../home/figures";
 import { initials } from "../look";
+import { hqName, withHq } from "../team/hq-name";
 
 /** The pattern of the tiles' lines (heights in %): low ticks with a few tall lines, as the wave. */
 const TILE_WAVE = [22, 22, 30, 22, 55, 30, 22, 22, 70, 40, 22, 30, 22, 85, 45, 22, 22, 35, 60, 22, 22, 30, 22, 22];
@@ -115,7 +116,8 @@ export function Customers({ kind, mine }: { kind?: CustomerKind; mine?: boolean 
               // channel and the cities whose customers are theirs.
               <>
                 <p className="mt-0.5 text-[13px] text-slate-500">
-                  <span className="font-semibold text-slate-800">{area.data.area.name}</span> · your area: the customers
+                  {/* The HQ, never the territory's whole name (28 Nov). */}
+                  <span className="font-semibold text-slate-800">{hqName(area.data.area.name, me?.name ?? null)}</span> · your area: the customers
                   of these cities are yours
                 </p>
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -261,7 +263,7 @@ export function Customers({ kind, mine }: { kind?: CustomerKind; mine?: boolean 
           />
           <input
             aria-label="Search"
-            placeholder="Search by name, phone number, CUS number or city"
+            placeholder="Search by name, phone number, CUS number, a doctor's PRC number or city"
             value={typed}
             onChange={(event) => setTyped(event.target.value)}
             className="h-10 w-full rounded-lg border border-slate-200 bg-white pr-3 pl-9 text-sm transition-colors hover:border-slate-300"
@@ -340,7 +342,8 @@ export function Customers({ kind, mine }: { kind?: CustomerKind; mine?: boolean 
         {!mine && (data.byRep.length > 1 || medrep) && (
           <div className="basis-full border-t border-slate-100 pt-2.5">
             <RepStrip
-              reps={data.byRep}
+              // Each person's HQ on hover, never the territory's whole name (28 Nov).
+              reps={data.byRep.map((rep) => ({ ...rep, area: rep.area ? hqName(rep.area, rep.name) : null }))}
               picked={medrep}
               total={data.byRep.reduce((all, rep) => all + rep.count, data.unassigned)}
               noun="customer"
@@ -417,7 +420,7 @@ export function Customers({ kind, mine }: { kind?: CustomerKind; mine?: boolean 
                           {row.name}
                         </Link>
                         <div className="truncate text-[11px] text-slate-500">
-                          {[row.code, row.specialty, row.worksAt].filter(Boolean).join(" · ")}
+                          {[row.code, row.prc && `PRC ${row.prc}`, row.specialty, row.worksAt].filter(Boolean).join(" · ")}
                         </div>
                       </div>
                     </div>
@@ -427,23 +430,21 @@ export function Customers({ kind, mine }: { kind?: CustomerKind; mine?: boolean 
                   <td className="px-3 py-2 text-slate-700">{row.city ?? "—"}</td>
                   {!mine && (
                     <td className="px-3 py-2">
+                      {/* The HQ first, then who holds it today (28 Nov): "TAFT · Marwin Dy". */}
                       {row.medrep ? (
-                        <>
-                          <div className="font-medium text-slate-800">
-                            {row.medrep}
-                            {row.manager && (
-                              <span className="font-normal text-slate-400"> › {row.manager}</span>
-                            )}
-                          </div>
-                          <div className="text-[11px] text-slate-500">{row.area ?? "No area"}</div>
-                        </>
+                        <div className="font-medium text-slate-800">
+                          {withHq(row.hq, row.medrep)}
+                          {row.manager && (
+                            <span className="font-normal text-slate-400"> › {row.manager}</span>
+                          )}
+                        </div>
                       ) : row.deskOwner ? (
                         <>
                           <div className="font-medium text-slate-800">{row.deskOwner}</div>
                           <div className="text-[11px] text-slate-500">Online desk</div>
                         </>
                       ) : (
-                        <span className="text-slate-400">Nobody yet</span>
+                        <span className="text-slate-400">{withHq(row.hq, "Nobody yet")}</span>
                       )}
                     </td>
                   )}
@@ -560,6 +561,8 @@ function CustomerCard({
             </h3>
             <div className="truncate text-[12.5px] font-medium text-slate-500">
               <span className="font-semibold text-slate-700">{row.code}</span>
+              {/* A doctor is known by their PRC licence number (27-28 Nov). */}
+              {row.prc ? ` · PRC ${row.prc}` : ""}
               {row.specialty ? ` · ${row.specialty}` : ""}
             </div>
           </div>
@@ -596,7 +599,7 @@ function CustomerCard({
             <div className="text-[11.5px] font-medium text-slate-400">Under</div>
             {row.medrep ? (
               <div className="truncate font-semibold text-slate-800">
-                {row.medrep}
+                {withHq(row.hq, row.medrep)}
                 {row.manager && (
                   <span className="font-normal text-slate-400"> › {row.manager}</span>
                 )}
@@ -606,7 +609,7 @@ function CustomerCard({
                 {row.deskOwner} <span className="font-normal text-slate-400">· Online desk</span>
               </div>
             ) : (
-              <div className="text-slate-400">Nobody yet</div>
+              <div className="text-slate-400">{withHq(row.hq, "Nobody yet")}</div>
             )}
           </div>
         ) : (

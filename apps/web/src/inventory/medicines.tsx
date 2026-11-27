@@ -28,6 +28,24 @@ import { NoResults } from "../no-results";
 
 const VAT = { exempt: "Exempt", vat12: "12%", zero: "Zero-rated" };
 
+/** A promo or an offer (Buy X Take Y, a special price) running today on the medicine (28 Nov: the
+ *  tile counted the promos alone and said none while offers ran). */
+const onOffer = (row: CatalogueRow) => Boolean(row.promo) || row.offers.length > 0;
+
+/** The small tag on a medicine with an offer running: its name, every one on hover. */
+function OfferTag({ row }: { row: CatalogueRow }) {
+  const first = row.offers[0];
+  if (!first) return null;
+  return (
+    <span title={row.offers.map((offer) => offer.name).join(" · ")}>
+      <Pill tone="violet">
+        {first.name}
+        {row.offers.length > 1 ? ` +${row.offers.length - 1}` : ""}
+      </Pill>
+    </span>
+  );
+}
+
 /** A cell of a set width that wraps to two lines: one long molecule or maker must not stretch
  *  the whole table (Aryan, 18 Nov). The full text is on hover. */
 function Wrap({ width, text }: { width: string; text: string | null | undefined }) {
@@ -67,7 +85,7 @@ export function Medicines() {
       if (category && row.category !== category) return false;
       if (stock === "low" && row.status === "ok") return false;
       if (stock === "out" && row.status !== "out") return false;
-      if (stock === "promo" && !row.promo) return false;
+      if (stock === "promo" && !onOffer(row)) return false;
       if (letter && !row.name.toUpperCase().startsWith(letter)) return false;
       const text = [
         row.name,
@@ -91,7 +109,7 @@ export function Medicines() {
   const { can, buyerTypes } = data;
   const low = data.rows.filter((row) => row.status === "low").length;
   const out = data.rows.filter((row) => row.status === "out").length;
-  const promos = data.rows.filter((row) => row.promo).length;
+  const promos = data.rows.filter(onOffer).length;
   const head =
     "border-b border-slate-200 bg-slate-50 px-3 py-2.5 text-[11px] font-semibold tracking-wide text-slate-500 uppercase";
 
@@ -263,6 +281,11 @@ export function Medicines() {
                       {row.name} {row.strength}
                     </Link>
                     <div className="truncate text-xs text-ink-2">{row.sku ?? row.code}</div>
+                    {row.offers.length > 0 && (
+                      <div className="mt-1">
+                        <OfferTag row={row} />
+                      </div>
+                    )}
                   </div>
                 </td>
                 <td className="px-3 py-3 text-right font-semibold tabular-nums">
@@ -396,6 +419,7 @@ function MedicineCard({ row, data }: { row: CatalogueRow; data: Catalogue }) {
         <StatusPill row={{ status: row.status, expiringSoon: false }} />
       </div>
       <div className="flex flex-wrap gap-1.5">
+        <OfferTag row={row} />
         {row.form && <Pill>{row.form}</Pill>}
         {row.pack && <Pill>{row.pack}</Pill>}
         {row.category && <Pill>{row.category}</Pill>}

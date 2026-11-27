@@ -8,8 +8,9 @@ import { Check, Undo2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { useHqNames } from "../team/hq-name";
 import { manilaToday } from "../team/range";
-import { Button, Dialog, Field, INPUT, Problem, useAction } from "../ui";
+import { Button, Dialog, Field, INPUT, Problem, useAction, useOpenOnPress } from "../ui";
 import { LEAVE_STATUS, spanWords } from "./my-leave";
 
 /** How far back a day may be asked for (the API says the same). */
@@ -37,6 +38,11 @@ export function FixLineRow({ line, showPerson = false }: { line: FixLine; showPe
   const action = useAction();
   const [refusing, setRefusing] = useState(false);
   const [note, setNote] = useState("");
+  // On Leave & forms the person shows after their HQ, "TAFT · Marwin Dy", and the whole line opens
+  // their month (28 Nov).
+  const { named } = useHqNames();
+  const open = useOpenOnPress();
+  const month = `/hr/attendance/${line.person.id}?month=${line.day.slice(0, 7)}`;
   const status = LEAVE_STATUS[line.status];
   const decide = (approve: boolean) =>
     action.run(async () => {
@@ -44,15 +50,15 @@ export function FixLineRow({ line, showPerson = false }: { line: FixLine; showPe
       await refresh(queries);
     });
   return (
-    <li className="flex flex-col gap-2 px-4 py-3 lg:flex-row lg:items-start lg:justify-between">
+    <li
+      onClick={showPerson ? open(month) : undefined}
+      className={`flex flex-col gap-2 px-4 py-3 lg:flex-row lg:items-start lg:justify-between ${showPerson ? "cursor-pointer hover:bg-slate-50/70" : ""}`}
+    >
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           {showPerson && (
-            <Link
-              to={`/hr/attendance/${line.person.id}?month=${line.day.slice(0, 7)}`}
-              className="font-semibold text-slate-900 hover:text-emerald-700"
-            >
-              {line.person.name}
+            <Link to={month} className="font-semibold text-slate-900 hover:text-emerald-700">
+              {named(line.person.id, line.person.name)}
             </Link>
           )}
           <span className={showPerson ? "text-slate-700" : "font-semibold text-slate-900"}>
@@ -86,6 +92,8 @@ export function FixLineRow({ line, showPerson = false }: { line: FixLine; showPe
                 event.preventDefault();
                 void decide(false);
               }}
+              // Writing why not stays here: a press around the box doesn't open the month.
+              onClick={(event) => event.stopPropagation()}
               className="flex items-center gap-2"
             >
               <input

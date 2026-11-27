@@ -29,6 +29,7 @@ import { useMe } from "../auth";
 import { FIELD } from "../org/dialogs";
 import { smaller } from "../photo";
 import { Ring } from "../team/charts";
+import { useHqNames } from "../team/hq-name";
 import { manilaToday } from "../team/range";
 import { Button, CARD, Dialog, PageHead, PageState, Problem, useAction } from "../ui";
 import { LEAVE_WORDS } from "./attendance-report";
@@ -506,6 +507,8 @@ export function FormLineRow({
   const [refusing, setRefusing] = useState<"refuse" | "return" | null>(null);
   const [resending, setResending] = useState(false);
   const [note, setNote] = useState("");
+  // On Leave & forms the person shows after their HQ, "TAFT · Marwin Dy" (28 Nov).
+  const { named } = useHqNames();
   const status =
     line.kind === "incident" && line.status === "approved"
       ? { word: "Taken in", tone: FORM_STATUS.approved.tone }
@@ -520,7 +523,7 @@ export function FormLineRow({
     <li className="flex flex-col gap-2 px-4 py-3 lg:flex-row lg:items-start lg:justify-between">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          {showPerson && <span className="font-semibold text-slate-900">{line.person.name}</span>}
+          {showPerson && <span className="font-semibold text-slate-900">{named(line.person.id, line.person.name)}</span>}
           <span className={showPerson ? "text-slate-700" : "font-semibold text-slate-900"}>
             {FORM_WORDS[line.kind]}
             {line.otType ? ` (${OT_WORDS[line.otType].toLowerCase()})` : ""}

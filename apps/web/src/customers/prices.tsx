@@ -11,6 +11,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { avatarTone, initials } from "../look";
 import { SectionPanel } from "../record";
+import { hqName } from "../team/hq-name";
 import { count, dayLabel, LookSwitch, peso, useLook } from "../ui";
 
 export const useOrderPrices = (orderId: number) =>
@@ -753,9 +754,13 @@ const monthWords = (month: string) =>
 /** This month in Manila: "2026-11". */
 const thisMonth = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date()).slice(0, 7);
 
+/** A seller as the earlier system named them ("MSA | Annie marie bais", "RX | NCL"): only the part
+ *  after "|", the person or the HQ (28 Nov), never the territory-style whole name. */
+const oldSeller = (seller: string) => (seller.includes("|") ? hqName(seller, null) : seller);
+
 /** On the customer's page: what they were given, medicine by medicine, and their orders from
  *  before this CRM. Shown once they have any such history. */
-export function PricesGiven({ customerId }: { customerId: number }) {
+export function PricesGiven({ customerId, hq = null }: { customerId: number; hq?: string | null }) {
   const query = useQuery({
     queryKey: ["customers", "prices", customerId],
     queryFn: () => api<CustomerPrices>(`/api/customers/${customerId}/prices`),
@@ -833,23 +838,21 @@ export function PricesGiven({ customerId }: { customerId: number }) {
         }
         flush
       >
-        {(data.zoho.seller || data.zoho.division || data.zoho.owed > 0) && (
-          // Whose customer it was in Zoho, and what Zoho's invoices still show as owed.
+        {(hq || data.zoho.seller || data.zoho.owed > 0) && (
+          // The HQ the customer belongs to (28 Nov: in place of Zoho's "Sold by RX | NCL" and its
+          // Division), or without one the earlier seller's name; and what Zoho's invoices still
+          // show as owed.
           <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 border-b border-slate-100 bg-slate-50/60 px-4 py-2.5 text-[12.5px] sm:px-5">
-            {data.zoho.seller && (
+            {hq ? (
               <span className="text-slate-600">
-                Sold by <b className="text-slate-900">{data.zoho.seller}</b>
+                HQ <b className="text-slate-900">{hq}</b>
               </span>
-            )}
-            {data.zoho.division && (
-              <span className="text-slate-600">
-                Division{" "}
-                <b className="text-slate-900">
-                  {[data.zoho.division, data.zoho.subDivision, data.zoho.headquarter]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </b>
-              </span>
+            ) : (
+              data.zoho.seller && (
+                <span className="text-slate-600">
+                  Sold by <b className="text-slate-900">{oldSeller(data.zoho.seller)}</b>
+                </span>
+              )
             )}
             {data.zoho.owed > 0 && (
               <span className="ml-auto rounded-full bg-amber-100 px-2.5 py-0.5 font-semibold text-amber-900 ring-1 ring-amber-200">
@@ -872,7 +875,7 @@ export function PricesGiven({ customerId }: { customerId: number }) {
                   <span className="text-slate-500">{dayLabel(order.on)}</span>
                   {order.seller && (
                     <span className="rounded bg-slate-100 px-1.5 py-px text-[11px] text-slate-600">
-                      {order.seller}
+                      {oldSeller(order.seller)}
                     </span>
                   )}
                 </span>

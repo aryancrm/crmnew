@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
 import { seedDemo } from "../seed";
-import type { CustomerDetail, CustomerList, CustomerMatch, Me, MyArea } from "../types";
+import type { CustomerDetail, CustomerList, CustomerMatch, CustomerPage, Me, MyArea } from "../types";
 import { phoneKey } from "./service";
 
 const PASSWORD = "test-password-1";
@@ -376,5 +376,57 @@ describe("changing and reviewing", () => {
     expect((await page("sarla", id)).customer).toMatchObject({ review: "ok", reviewedBy: "Sarla" });
     expect((await post("sarla", `/api/customers/${id}/review`)).status).toBe(409);
     expect(names(await list("sarla", "?review=1"))).toEqual(["Rosario Santos"]);
+  });
+});
+
+describe("who looks after a customer (28 Nov)", () => {
+  it("is whoever holds the seat of their territory today; a territory no seat holds keeps its MedRep", async () => {
+    // Abe is still marked with Ryan's territory but holds no seat of it, as after a handover; before,
+    // being first by name, he was the one shown.
+    const [abe] = await rows<{ id: number }>(
+      db,
+      sql`insert into person (name, email, role, password_hash, area_id, channel_id)
+        select 'Abe Former', 'abe.former@2mg.test', 'medrep', 'x', area_id, channel_id from person where email = 'ryan@2mg.test'
+        returning id::int as id`,
+    );
+    const row = async (id: number, q: string) => (await list("sarla", `?q=${q}`)).rows.find((one) => one.id === id);
+    // The list: Ryan holds the seat of "HOS | Pasay", under his lead, and the customer's HQ is Pasay.
+    expect(await row(ids.sanjuan as number, "san%20juan")).toMatchObject({ medrep: "Ryan", manager: "Daniel", hq: "Pasay" });
+    const all = await list("sarla");
+    expect(all.byRep.map((rep) => rep.name)).not.toContain("Abe Former");
+    const ryan = all.byRep.find((rep) => rep.name === "Ryan");
+    expect((await list("sarla", `?medrep=${ryan?.id}`)).rows.every((one) => one.medrep === "Ryan")).toBe(true);
+    // The page: looked after by Ryan and up his line; its HQ, the territory's name kept underneath.
+    const shown = (await (await get("sarla", `/api/customers/${ids.sanjuan}/page`)).json()) as CustomerPage;
+    expect(shown.line[0]?.name).toBe("Ryan");
+    expect(shown.customer).toMatchObject({ medrep: "Ryan", hq: "Pasay", area: "HOS | Pasay" });
+
+    // A territory no seat holds goes by its MedRep, as before.
+    const [davao] = await rows<{ id: number }>(
+      db,
+      sql`insert into area (channel_id, name) select id, 'HOS | Davao' from channel where code = 'HOSP' returning id::int as id`,
+    );
+    await db.execute(sql`update person set area_id = ${davao?.id} where id = ${abe?.id}`);
+    await db.execute(sql`update customer set area_id = ${davao?.id} where id = ${ids.davao}`);
+    expect(await row(ids.davao as number, "davao")).toMatchObject({ medrep: "Abe Former", hq: "Davao" });
+    const far = (await (await get("sarla", `/api/customers/${ids.davao}/page`)).json()) as CustomerPage;
+    expect(far.line[0]?.name).toBe("Abe Former");
+    // Put back as it was.
+    await db.execute(sql`update customer set area_id = null where id = ${ids.davao}`);
+    await db.execute(sql`update person set active = false where id = ${abe?.id}`);
+  });
+});
+
+describe("a doctor's PRC licence number (28 Nov)", () => {
+  it("finds the doctor in the list, typed with or without the zeros in front, and shows on their card", async () => {
+    // Dr. Lea Uy, added above with PRC 0777123.
+    for (const typed of ["0777123", "777123", "PRC-0777123"]) {
+      const found = await list("sarla", `?kind=doctor&q=${encodeURIComponent(typed)}`);
+      expect(names(found), typed).toEqual(["Dr. Lea Uy"]);
+      expect(found.rows[0]?.prc).toBe("0777123");
+    }
+    // Only a doctor's: a hospital's licence number isn't searched or shown as one.
+    expect((await list("sarla", "?q=3000001")).total).toBe(0);
+    expect((await list("sarla", "?kind=hospital")).rows.every((one) => one.prc === null)).toBe(true);
   });
 });

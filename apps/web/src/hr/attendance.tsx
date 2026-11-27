@@ -14,7 +14,9 @@ import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-r
 import { api } from "../api";
 import { useMe } from "../auth";
 import { clock, hourOf, hours, IN_FROM, OUT_FROM } from "./parts";
-import { Button, CARD, Dialog, Field, INPUT, PageHead, PageState, Problem, useAction } from "../ui";
+import { Button, CARD, Dialog, Field, INPUT, PageHead, PageState, Problem, useAction, useOpenOnPress } from "../ui";
+import { counted } from "../ceo";
+import { useHqNames } from "../team/hq-name";
 import { LEAVE_WORDS } from "./attendance-report";
 import { FixDialog, FixLineRow, fixable } from "./corrections";
 import { BiometricDialog, sheetWords } from "./timekeeping";
@@ -72,6 +74,9 @@ export function AttendancePage() {
   });
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  // Each person after their HQ, "TAFT · Marwin Dy" (28 Nov); the whole row opens their month.
+  const { named, hqOf } = useHqNames();
+  const open = useOpenOnPress();
   const data = query.data;
   if (!me) return null;
   if (!data) return <PageState query={query} what="attendance" />;
@@ -86,7 +91,10 @@ export function AttendancePage() {
   };
   const words = q.trim().toLowerCase();
   const rows = data.people.filter((one) => {
-    if (words && !`${one.name} ${one.team ?? ""} ${one.title ?? ""}`.toLowerCase().includes(words))
+    if (
+      words &&
+      !`${one.name} ${hqOf(one.personId) ?? ""} ${one.team ?? ""} ${one.title ?? ""}`.toLowerCase().includes(words)
+    )
       return false;
     if (filter === "working") return one.today.working;
     if (filter === "done") return one.today.timeIn && !one.today.working;
@@ -187,7 +195,7 @@ export function AttendancePage() {
             />
           </label>
           <span className="text-xs text-slate-500">
-            {rows.length} of {data.people.length} people
+            {rows.length} of {counted(data.people.length, "person", "people")}
             {filter !== "all" && (
               <button
                 type="button"
@@ -215,14 +223,12 @@ export function AttendancePage() {
             <tbody className="divide-y divide-slate-100">
               {rows.map((one) => {
                 const status = statusOf(one.today);
+                const month = `/hr/attendance/${one.personId}${day !== today ? `?month=${day.slice(0, 7)}` : ""}`;
                 return (
-                  <tr key={one.personId} className="hover:bg-slate-50/70">
+                  <tr key={one.personId} onClick={open(month)} className="cursor-pointer hover:bg-slate-50/70">
                     <td className="px-4 py-2.5">
-                      <Link
-                        to={`/hr/attendance/${one.personId}${day !== today ? `?month=${day.slice(0, 7)}` : ""}`}
-                        className="font-semibold text-slate-900 hover:text-emerald-700"
-                      >
-                        {one.name}
+                      <Link to={month} className="font-semibold text-slate-900 hover:text-emerald-700">
+                        {named(one.personId, one.name)}
                       </Link>
                       <div className="text-xs text-slate-500">
                         {[one.title, one.team].filter(Boolean).join(" · ")}
@@ -256,7 +262,7 @@ export function AttendancePage() {
                       {hours(one.today.lateMinutes)}
                     </td>
                     <td className="px-3 py-2.5 text-right text-xs text-slate-600 tabular-nums">
-                      {one.month.days} days · {hours(one.month.workedMinutes)}
+                      {counted(one.month.days, "day")} · {hours(one.month.workedMinutes)}
                       {one.month.lateDays > 0 && (
                         <span className="text-amber-700"> · {one.month.lateDays} late</span>
                       )}
@@ -320,6 +326,8 @@ export function AttendanceMonthPage() {
   // A day the person asks to be put right (an empty day: any day they pick).
   const [asking, setAsking] = useState<AttendanceDay | "any" | null>(null);
   const [reviewing, setReviewing] = useState<BiometricDay | null>(null);
+  // The person after their HQ, "TAFT · Marwin Dy" (28 Nov).
+  const { named } = useHqNames();
   const data = query.data;
   if (!data) return <PageState query={query} what="the attendance" />;
   const mine = me?.id === data.person.id;
@@ -332,7 +340,7 @@ export function AttendanceMonthPage() {
   const days = [...data.days].reverse();
   const biometric = data.biometric ? new Map(data.biometric.map((one) => [one.day, one])) : null;
   const totals: [string, string, string?][] = [
-    ["Came in", `${data.totals.present} of ${data.totals.workDays} days`],
+    ["Came in", `${data.totals.present} of ${counted(data.totals.workDays, "day")}`],
     ["Hours worked", hours(data.totals.workedMinutes)],
     ["Absent", String(data.totals.absent), data.totals.absent ? "text-rose-700" : undefined],
     [
@@ -347,7 +355,7 @@ export function AttendanceMonthPage() {
     ],
     [
       "On leave",
-      data.totals.leaveDays ? `${data.totals.leaveDays} days` : "—",
+      data.totals.leaveDays ? counted(data.totals.leaveDays, "day") : "—",
       data.totals.leaveDays ? "text-violet-700" : undefined,
     ],
   ];
@@ -374,12 +382,12 @@ export function AttendanceMonthPage() {
           </>
         )}
         <span className="font-medium text-slate-700">
-          {mine ? "My attendance" : data.person.name}
+          {mine ? "My attendance" : named(data.person.id, data.person.name)}
         </span>
       </nav>
       <PageHead
-        title={mine ? "My attendance" : data.person.name}
-        sub={`${data.schedule.name}: ${hourOf(data.schedule.start)} – ${hourOf(data.schedule.end)}, ${data.schedule.days.length === 6 ? "Monday to Saturday" : `${data.schedule.days.length} days a week`}`}
+        title={mine ? "My attendance" : named(data.person.id, data.person.name)}
+        sub={`${data.schedule.name}: ${hourOf(data.schedule.start)} – ${hourOf(data.schedule.end)}, ${data.schedule.days.length === 6 ? "Monday to Saturday" : `${counted(data.schedule.days.length, "day")} a week`}`}
         actions={
           <div className="flex items-center gap-1">
             {data.can.askFix && (
