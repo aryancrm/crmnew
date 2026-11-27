@@ -10,6 +10,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { exactPeso, shortPeso } from "../ceo";
 import { withUnit } from "./switch";
+import { withHq } from "./hq-name";
 
 type Row = TeamAccounts["rows"][number];
 type State = Row["state"];
@@ -135,7 +136,7 @@ export function TeamAccountsCard({ unit = null, division }: { unit?: number | nu
                     {[row.kind, row.city].filter(Boolean).join(" · ")}
                   </span>
                 </td>
-                <td className="px-3 py-2 whitespace-nowrap text-slate-600">{row.seller ?? "—"}</td>
+                <td className="px-3 py-2 whitespace-nowrap text-slate-600">{row.seller ? withHq(row.hq, row.seller) : (row.hq ?? "—")}</td>
                 <td className="px-3 py-2 whitespace-nowrap text-slate-600">
                   {ago(row.since)}
                   {row.usual && row.state !== "never" && <span className="block text-[11px] text-slate-400">every ~{row.usual} days</span>}

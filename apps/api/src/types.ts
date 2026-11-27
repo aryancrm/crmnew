@@ -3721,6 +3721,8 @@ export type TeamAccounts = {
     city: string | null;
     /** Who holds the seat of the customer's area in the team. */
     seller: string | null;
+    /** The customer's HQ (TAFT, ON SITE), shown before the seller (PLAN 276). */
+    hq: string | null;
     firstOn: string | null;
     lastOrderOn: string | null;
     since: number | null;

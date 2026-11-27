@@ -12,6 +12,7 @@ import { Refusal } from "../http";
 import { addDays, todayManila } from "../inventory/rules";
 import type { Me, TeamAccounts } from "../types";
 import { teamSeats } from "./service";
+import { hqOf } from "./hq-name";
 
 const LEADS = ["team_lead", "manager", "ceo", "admin"];
 
@@ -32,7 +33,7 @@ export async function teamAccounts(db: Database, me: Me): Promise<TeamAccounts> 
   );
   const first = `${today.slice(0, 7)}-01`;
   const yearAgo = addDays(today, -365);
-  const found = await rows<Omit<TeamAccounts["rows"][number], "state">>(
+  const found = await rows<Omit<TeamAccounts["rows"][number], "state" | "hq"> & { area: string | null }>(
     db,
     sql`with mine as (
         select c.id from customer c where c.active and c.kind <> 'patient' and (
@@ -65,6 +66,10 @@ export async function teamAccounts(db: Database, me: Me): Promise<TeamAccounts> 
       select c.id::int as "customerId", c.name, c.kind, c.city,
         (select p.name from seat st join seat_holder h on h.seat_id = st.id and h.kind = 'holder' and h.ends_on is null
            join person p on p.id = h.person_id where st.area_id = c.area_id and st.id in (${seats}) order by h.starts_on desc limit 1) as seller,
+        -- The customer's HQ (its territory; none when a lead's own seat holds it), shown before the
+        -- seller (28 Nov, PLAN 276).
+        (select a.name from area a where a.id = c.area_id
+          and not exists (select 1 from seat ls where ls.area_id = a.id and ls.active and ls.lead)) as area,
         to_char(s.first, 'YYYY-MM-DD') as "firstOn", to_char(s.last, 'YYYY-MM-DD') as "lastOrderOn",
         (${today}::date - s.last)::int as since, round(s.usual)::int as usual,
         coalesce(s.month, 0)::float8 as "soldMonth", coalesce(s.year, 0)::float8 as "soldYear",
@@ -85,7 +90,10 @@ export async function teamAccounts(db: Database, me: Me): Promise<TeamAccounts> 
     if (one.lastOrderOn && addDays(one.lastOrderOn, one.usual ?? 28) <= weekAhead) return "due";
     return "ok";
   };
-  const withState = found.map((one) => ({ ...one, state: stateOf(one) }));
+  const withState = found.map((row) => {
+    const { area, ...one } = row;
+    return { ...one, hq: area ? hqOf(area, one.seller) : null, state: stateOf(row) };
+  });
   const count = (state: TeamAccounts["rows"][number]["state"]) => withState.filter((one) => one.state === state).length;
   // One city however it was typed ("MANILA", "Manila"), shown in title case.
   const byCity = new Map<string, { accounts: number; soldYear: number }>();
