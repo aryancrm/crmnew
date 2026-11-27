@@ -16,6 +16,15 @@
 //   it (27 Nov: "the same password for all for now; we change them later"). Never written here.
 // - The data checks (Admin panel → Data checks) of each company, before, and after when applied.
 //
+// --together (27 Nov, the backend developer: "keep both companies connected for now; only what is
+// written is tagged to the right company"): everyone stays in 2MG's database, so teams stay whole
+// (Vanessa with her Hospital team); each one's employer (2MG or GPI, from the Employee ID) is on their
+// HR record, and each order says which company invoices it. Getmeds is still made with its System
+// admin, its own database empty of people for now.
+// --management=<Employee ID>: that person also gets a seat leading a "Management" box at the top (Ma'am
+// Veron, 27 Nov), so the Management desk is theirs.
+// HR's sheet may be the .xlsx or a .csv with the same columns.
+//
 // Check first (the default): it reads and says what it would do; nothing is written. --apply writes.
 //
 //   On a computer (a trial's folders; see scripts/trial-companies.ts):
@@ -34,7 +43,7 @@ import { folderPlaces, openCompanies, postgresPlaces, type Running } from "../sr
 import { type Database, rows } from "../src/db/index";
 import { migrate } from "../src/db/migrate";
 import { updateRecord } from "../src/hr/people";
-import { addPerson, addUnit, personLeaves, projectOrg } from "../src/org/service";
+import { addPerson, addSeat, addUnit, fillSeat, personLeaves, projectOrg } from "../src/org/service";
 import { readXlsxBytes } from "../src/reports/xlsx-read";
 import type { Me } from "../src/types";
 
@@ -42,6 +51,8 @@ const GETMEDS = { name: "Getmeds Philippines Incorporated", code: "GPI", loginId
 const TO_PLACE = "To be placed (HR)";
 
 const apply = process.argv.includes("--apply");
+const together = process.argv.includes("--together");
+const managementId = process.argv.find((one) => one.startsWith("--management="))?.slice("--management=".length).replace(/\s*-\s*/, "-").toUpperCase() ?? null;
 const live = process.argv.includes("--live");
 const file = process.argv.slice(2).find((one) => !one.startsWith("--"));
 if (!file || !existsSync(file)) throw new Error("Give HR's master data (.xlsx) first.");
@@ -73,7 +84,7 @@ const list = await openCompanies({
   },
 });
 const home = list.home();
-console.log(`${live ? "LIVE" : `Trial (${process.env.TRIAL_DIR})`} · ${apply ? "APPLYING" : "checking only (nothing is written)"}`);
+console.log(`${live ? "LIVE" : `Trial (${process.env.TRIAL_DIR})`} · ${apply ? "APPLYING" : "checking only (nothing is written)"}${together ? " · together: everyone in 2MG's database" : " · by Employee ID: GPI people into Getmeds"}`);
 for (const one of list.all()) console.log(`  company: ${one.ref.name} (${one.ref.code}, Org ID ${one.ref.orgId}, @${one.ref.loginDomain})`);
 
 const checksOf = async (one: Running, when: string) => {
@@ -98,8 +109,29 @@ for (const one of list.all()) {
 
 // ---- HR's master data ----
 type SheetPerson = { id: string; employer: "2mg" | "gpi"; first: string; last: string; name: string; full: string; emails: string[] };
-const [sheet] = readXlsxBytes(new Uint8Array(readFileSync(file)));
-const cells = (sheet?.rows ?? []).map((row) => row.cells.map((cell) => String(cell ?? "").replace(/\s+/g, " ").trim()));
+/** A CSV line's cells (quotes as Excel writes them). */
+const csvCells = (line: string) => {
+  const out: string[] = [];
+  let cell = "";
+  let quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i] as string;
+    if (quoted && ch === '"' && line[i + 1] === '"') {
+      cell += '"';
+      i++;
+    } else if (ch === '"') quoted = !quoted;
+    else if (ch === "," && !quoted) {
+      out.push(cell);
+      cell = "";
+    } else cell += ch;
+  }
+  out.push(cell);
+  return out;
+};
+const rawRows = file.toLowerCase().endsWith(".csv")
+  ? readFileSync(file, "utf8").replace(/^\uFEFF/, "").split(/\r?\n/).map(csvCells)
+  : (readXlsxBytes(new Uint8Array(readFileSync(file)))[0]?.rows ?? []).map((row) => row.cells);
+const cells = rawRows.map((row) => row.map((cell) => String(cell ?? "").replace(/\s+/g, " ").trim()));
 const headAt = cells.findIndex((row) => row.includes("EMP. ID NO."));
 if (headAt < 0) throw new Error("No 'EMP. ID NO.' column in the first sheet.");
 const head = cells[headAt] as string[];
@@ -249,12 +281,12 @@ const twoMg = matchUp(people, homeKnown);
 for (const [personId, person] of twoMg.taken) {
   const was = homeKnown.find((one) => one.id === personId) as Known;
   if (!sameName(was.name, person.name)) toLook.push(`${person.id}: the CRM says "${was.name}", HR's sheet "${person.full}". Which spelling?`);
-  if (person.employer === "gpi") continue;
+  if (person.employer === "gpi" && !together) continue;
   const email = workEmail(person, home.ref.loginDomain, was.email?.toLowerCase() ?? null);
-  if (was.code !== person.id) say(`[2MG] ${was.name}: Employee ID ${person.id}, employer 2MG`);
+  if (was.code !== person.id) say(`[2MG] ${was.name}: Employee ID ${person.id}, employer ${person.employer.toUpperCase()}`);
   if (email) say(`[2MG] ${was.name}: signs in with ${email}`);
   await write(home, async () => {
-    if (was.code !== person.id) await updateRecord(home.db, homeMe, personId, { employeeCode: person.id, company: "2mg" });
+    if (was.code !== person.id) await updateRecord(home.db, homeMe, personId, { employeeCode: person.id, company: person.employer });
     if (email) await home.db.execute(sql`update person set email = ${email} where id = ${personId}`);
   });
 }
@@ -274,10 +306,35 @@ async function addUnplaced(one: Running, me: Me, person: SheetPerson) {
     await updateRecord(one.db, me, made.personId, { company: person.employer });
   });
 }
-for (const person of twoMg.free.filter((one) => one.employer === "2mg")) await addUnplaced(home, homeMe, person);
+for (const person of twoMg.free.filter((one) => together || one.employer === "2mg")) await addUnplaced(home, homeMe, person);
 
-// ---- Getmeds' people ----
-if (getmeds) {
+// Ma'am Veron's Management desk (27 Nov): a seat leading a "Management" box at the top, as a second seat.
+if (managementId) {
+  const person = people.find((one) => one.id === managementId);
+  const personId = [...twoMg.taken].find(([, one]) => one.id === managementId)?.[0];
+  if (!person || !personId) toLook.push(`--management=${managementId}: nobody with that Employee ID in 2MG.`);
+  else {
+    const [has] = await rows(
+      home.db,
+      sql`select 1 as one from seat_holder h join seat s on s.id = h.seat_id and s.active where h.person_id = ${personId} and s.module = 'management'
+        and (h.ends_on is null or h.ends_on >= current_date)`,
+    );
+    if (!has) {
+      say(`[2MG] ${person.name} (${person.id}): a seat leading "Management", so the Management desk is theirs (their other seat stays)`);
+      await write(home, async () => {
+        const [top] = await rows<{ id: number }>(home.db, sql`select id::int as id from org_unit where parent_id is null and active order by id limit 1`);
+        const [box] = await rows<{ id: number }>(home.db, sql`select id::int as id from org_unit where parent_id = ${top?.id} and active and lower(name) = 'management'`);
+        const unitId = box?.id ?? (await addUnit(home.db, homeMe, { name: "Management", kind: "department", parentId: top?.id as number })).unitId;
+        const [lead] = await rows<{ id: number }>(home.db, sql`select id::int as id from seat where unit_id = ${unitId} and active and lead`);
+        const seatId = lead?.id ?? (await addSeat(home.db, homeMe, { unitId, title: "Operations Management", module: "management", lead: true })).seatId;
+        await fillSeat(home.db, homeMe, seatId, { personId, keepOther: true, reason: "Management desk (27 Nov)" });
+      });
+    }
+  }
+}
+
+// ---- Getmeds' people (by Employee ID; --together keeps them in 2MG's database) ----
+if (getmeds && !together) {
   const gm = getmeds;
   const gmMe = await adminOf(gm.db);
   const gmKnown = await knownIn(gm.db);
@@ -367,7 +424,7 @@ if (getmeds) {
   const placedGpi = new Set([...inGm.taken.values(), ...withSeats.map((one) => one.person)]);
   for (const person of gpiPeople.filter((one) => !placedGpi.has(one) && !gmKnown.some((known) => known.code === one.id))) await addUnplaced(gm, gmMe, person);
   for (const one of gmKnown) if (!inGm.taken.has(one.id)) toLook.push(`[GPI] ${one.name}${one.code ? ` (${one.code})` : ""}: in Getmeds, not in HR's sheet (left as it is).`);
-} else toLook.push(`${GETMEDS.name} isn't on the list yet: its people are added when this is applied.`);
+} else if (!together) toLook.push(`${GETMEDS.name} isn't on the list yet: its people are added when this is applied.`);
 
 // ---- One password for everyone, for now ----
 if (password !== null) {
