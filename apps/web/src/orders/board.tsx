@@ -1095,7 +1095,7 @@ export function OrderCardItem({
         onKeyDown={(event) => {
           if (event.key === "Enter" && event.target === event.currentTarget) open();
         }}
-        className={`group relative flex min-w-0 cursor-pointer flex-col justify-between rounded-2xl border p-3.5 shadow-2xs transition-[border-color,box-shadow] hover:shadow-sm focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:outline-none ${
+        className={`group relative flex min-w-0 cursor-pointer flex-col justify-between rounded-2xl border p-3.5 shadow-sm transition-[border-color,box-shadow] hover:shadow-md focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:outline-none ${
           stopped
             ? "border-rose-200/80 bg-rose-50/60 hover:border-rose-300"
             : finished
@@ -1109,7 +1109,7 @@ export function OrderCardItem({
           <div className="flex items-start justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
               <span
-                className="flex size-10 shrink-0 items-center justify-center rounded-full bg-slate-900 text-[13px] font-bold text-white"
+                className={`flex size-9 shrink-0 items-center justify-center rounded-xl text-xs font-bold shadow-2xs ${avatarTone(card.customer)}`}
               >
                 {initials(card.customer)}
               </span>
@@ -1124,14 +1124,14 @@ export function OrderCardItem({
                 </div>
                 {/* Wraps instead of cutting, so the Division chip shows whole (Aryan, 26 Nov). */}
                 <div
-                  className="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[12.5px] font-medium text-slate-500"
+                  className="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[11px] font-medium text-slate-500"
                   title={card.customerPhone ? `Phone ${card.customerPhone}` : undefined}
                 >
                   <span className="font-semibold text-slate-700">{peso(card.total)}</span> ·{" "}
                   {card.code}
                   {/* Its Division, which says the papers it carries (19 Nov). */}
                   {card.division && (
-                    <span className="ml-0.5 shrink-0 rounded bg-indigo-50 px-1.5 py-0.5 text-[11.5px] font-bold text-indigo-700">
+                    <span className="ml-0.5 shrink-0 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-800">
                       {card.division}
                     </span>
                   )}
@@ -1141,30 +1141,30 @@ export function OrderCardItem({
                 {(finished || flagged || card.changed || late || isNew) && (
                   <div className="mt-1 flex flex-wrap items-center gap-1.5">
                       {finished && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 text-[11.5px] font-semibold text-white">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-semibold text-white">
                           <CheckCheck className="size-3" /> Delivered
                         </span>
                       )}
                       {flagged && (
-                        <span className="inline-flex items-center rounded-full bg-rose-600 px-2 py-0.5 text-[11.5px] font-semibold text-white">
+                        <span className="inline-flex items-center rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-semibold text-white">
                           {card.statusLabel}
                         </span>
                       )}
                       {card.changed && (
                         <span
-                          className="inline-flex items-center rounded-full bg-sky-600 px-2 py-0.5 text-[11.5px] font-semibold text-white"
+                          className="inline-flex items-center rounded-full bg-sky-600 px-2 py-0.5 text-[10px] font-semibold text-white"
                           title="Management changed its medicines or prices before approving: open it to see what"
                         >
                           Changed by Mgmt
                         </span>
                       )}
                       {late && (
-                        <span className="inline-flex items-center rounded-full bg-rose-600 px-2 py-0.5 text-[11.5px] font-semibold text-white">
+                        <span className="inline-flex items-center rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-semibold text-white">
                           Late
                         </span>
                       )}
                       {isNew && !late && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-[11.5px] font-semibold text-white shadow-2xs">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-semibold text-white shadow-2xs">
                           <span className="size-1.5 rounded-full bg-white" />
                           New
                         </span>
@@ -1174,10 +1174,10 @@ export function OrderCardItem({
               </div>
             </div>
 
-            <div className="flex shrink-0 flex-col items-end gap-1 text-[12.5px]">
+            <div className="flex shrink-0 flex-col items-end gap-1 text-[11px]">
               <span className="flex items-center gap-1.5">
                 <span
-                  className={`text-[11.5px] font-medium tabular-nums ${late ? "text-rose-700" : "text-slate-400"}`}
+                  className={`text-[10px] font-medium tabular-nums ${late ? "text-rose-700" : "text-slate-400"}`}
                   title={`${card.statusLabel} since ${new Date(card.stepSince).toLocaleString("en-PH", { timeZone: "Asia/Manila" })} · placed ${new Date(card.submittedAt).toLocaleString("en-PH", { timeZone: "Asia/Manila" })}`}
                 >
                   {waited(card.stepSince)}
@@ -1230,31 +1230,31 @@ export function OrderCardItem({
 
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
             <span
-              className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-[11.5px] font-medium text-white ${KIND_SOLID[card.customerKind] ?? KIND_SOLID.hospital}`}
+              className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold text-white ${KIND_SOLID[card.customerKind] ?? KIND_SOLID.hospital}`}
             >
               {kind?.label}
             </span>
             {/* Only when the Division chip beside the code doesn't say it already. */}
             {card.channel && card.channel !== card.division && (
-              <span className="max-w-[120px] truncate text-[11.5px] font-semibold text-slate-600">
+              <span className="max-w-[120px] truncate text-[10px] font-semibold text-slate-600">
                 {card.channel}
               </span>
             )}
             {card.via && (
               <span
-                className="inline-flex shrink-0 items-center rounded-full bg-violet-600 px-2 py-0.5 text-[11.5px] font-semibold text-white"
+                className="inline-flex shrink-0 items-center rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-semibold text-white"
                 title={`Came in through the Online desk: case ${card.via.code}`}
               >
                 Online · {card.via.source}
               </span>
             )}
             <PapChip pap={card.pap} />
-            <span className="inline-flex items-center rounded-full bg-slate-700 px-2.5 py-0.5 text-[11.5px] font-medium text-white">
+            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
               {termsOf(card)}
             </span>
             {card.customerCity && (
               <span
-                className="inline-flex max-w-[140px] items-center gap-0.5 truncate text-[11.5px] text-slate-500"
+                className="inline-flex max-w-[140px] items-center gap-0.5 truncate text-[10px] text-slate-500"
                 title={card.customerCity}
               >
                 <MapPin className="size-2.5 shrink-0 text-slate-400" />
@@ -1263,32 +1263,32 @@ export function OrderCardItem({
             )}
           </div>
 
-          <p className="mt-2 truncate text-[12.5px] text-slate-600" title={card.lines}>
+          <p className="mt-2 truncate text-[11px] text-slate-600" title={card.lines}>
             <span className="font-semibold text-slate-700">Medicine:</span> {card.lines}
           </p>
           {warehouse ? (
             // The warehouse's facts: where it goes, to whom, how many pieces, by when.
-            <div className="mt-1.5 space-y-1.5 text-[12.5px] text-slate-600">
+            <div className="mt-1.5 space-y-1.5 text-[11px] text-slate-600">
               <p className="truncate" title={card.deliveryAddress ?? undefined}>
                 <span className="font-semibold text-slate-700">Deliver to:</span>{" "}
                 {[card.receiver, card.deliveryAddress].filter(Boolean).join(" · ") || "—"}
               </p>
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11.5px] font-semibold text-slate-700 tabular-nums">
+                <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700 tabular-nums">
                   {count(card.pieces)} pcs
                 </span>
                 {card.receiverPhone && (
                   <a
                     href={`tel:${card.receiverPhone.replace(/[^\d+]/g, "")}`}
                     onClick={(event) => event.stopPropagation()}
-                    className="rounded px-1 py-0.5 text-[11.5px] font-medium text-slate-600 tabular-nums hover:bg-slate-100"
+                    className="rounded px-1 py-0.5 text-[10px] font-medium text-slate-600 tabular-nums hover:bg-slate-100"
                   >
                     {card.receiverPhone}
                   </a>
                 )}
                 {card.expectedOn && inWarehouse && (
                   <span
-                    className={`rounded px-1.5 py-0.5 text-[11.5px] font-semibold ${
+                    className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
                       card.expectedOn < today
                         ? "bg-rose-50 text-rose-800 ring-1 ring-rose-200"
                         : card.expectedOn === today
@@ -1306,7 +1306,7 @@ export function OrderCardItem({
               </div>
             </div>
           ) : (
-            <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-slate-500">
+            <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
               {showRep && (
                 <span className="inline-flex min-w-0 items-center gap-1">
                   <UserRound className="size-3 shrink-0 text-slate-400" />
@@ -1317,7 +1317,7 @@ export function OrderCardItem({
             </div>
           )}
           {warehouse && atDispatch && card.items.some((item) => item.cold) && (
-            <div className="mt-2 inline-flex w-fit items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-[11.5px] font-semibold text-sky-800">
+            <div className="mt-2 inline-flex w-fit items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold text-sky-800">
               <Snowflake className="size-3" aria-hidden="true" /> Keep cold
             </div>
           )}
@@ -1325,7 +1325,7 @@ export function OrderCardItem({
             card.status === "packing" &&
             card.cameBackCount > 0 &&
             card.cameBackReason && (
-              <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[12.5px] leading-snug text-rose-900">
+              <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11px] leading-snug text-rose-900">
                 <span className="font-semibold">
                   Came back{card.cameBackCount > 1 ? ` ${card.cameBackCount} times` : ""}:
                 </span>{" "}
@@ -1333,7 +1333,7 @@ export function OrderCardItem({
               </div>
             )}
           {warehouse && inWarehouse && onTake && (
-            <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-slate-500">
+            <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
               {
                 // Who has it in hand, so two people don't pack the same order.
                 <span className="inline-flex items-center gap-1">
@@ -1385,7 +1385,7 @@ export function OrderCardItem({
           {financeChecking && <FinanceSteps card={card} />}
           {!checking && !financeChecking && (
             <>
-              <div className="mb-1 flex items-center justify-between gap-2 text-[11.5px] font-medium text-slate-400">
+              <div className="mb-1 flex items-center justify-between gap-2 text-[10px] font-medium text-slate-400">
                 <span>{finished ? "Completed" : "Next action"}</span>
                 {finished ? (
                   <CheckCheck className="size-3.5 text-emerald-600" />
@@ -1394,14 +1394,14 @@ export function OrderCardItem({
                 )}
               </div>
               <p
-                className={`mb-2 line-clamp-2 text-[12.5px] leading-snug font-medium ${stopped ? "text-rose-700" : "text-slate-800"}`}
+                className={`mb-2 line-clamp-2 text-[11px] leading-snug font-medium ${stopped ? "text-rose-700" : "text-slate-800"}`}
                 title={card.next}
               >
                 {card.next}
               </p>
               {/* The MedRep answered the hold: said on the card, so the desk knows it is its turn (23 Nov). */}
               {stopped && card.reply && (
-                <p className="mb-2 line-clamp-2 rounded-md bg-emerald-50 px-2 py-1 text-[12.5px] leading-snug font-medium text-emerald-900" title={card.reply}>
+                <p className="mb-2 line-clamp-2 rounded-md bg-emerald-50 px-2 py-1 text-[11px] leading-snug font-medium text-emerald-900" title={card.reply}>
                   Answered: {card.reply}
                 </p>
               )}
@@ -1410,7 +1410,7 @@ export function OrderCardItem({
           {/* Back from the MedRep after being sent back: marked, with what they answered (23 Nov). */}
           {card.status === "pending_approval" && card.sentBackCount > 0 && (
             <p
-              className="mb-2 line-clamp-2 rounded-md bg-amber-50 px-2 py-1 text-[12.5px] leading-snug font-medium text-amber-900"
+              className="mb-2 line-clamp-2 rounded-md bg-amber-50 px-2 py-1 text-[11px] leading-snug font-medium text-amber-900"
               title={[card.sentBackReason, card.reply].filter(Boolean).join(" → ")}
             >
               Sent again{card.sentBackCount > 1 ? ` (${card.sentBackCount}×)` : ""}
@@ -1420,7 +1420,7 @@ export function OrderCardItem({
           {/* Every order in Management's (or Finance's) queue stands at the same step: no strip there. */}
           {!checking && !financeChecking && (
             <>
-              <div className="mb-1.5 flex items-center justify-between text-[11.5px] font-medium text-slate-500">
+              <div className="mb-1.5 flex items-center justify-between text-[10px] font-medium text-slate-500">
                 <span
                   className={`max-w-[170px] truncate font-semibold ${stopped ? "text-rose-700" : "text-slate-700"}`}
                 >
@@ -1430,7 +1430,7 @@ export function OrderCardItem({
                       ? "Delivered"
                       : STRIP[stepIdx]}
                 </span>
-                <span className="shrink-0 text-[10.5px] text-slate-400">
+                <span className="shrink-0 text-[10px] text-slate-400">
                   {finished ? "Complete" : `${stepIdx + 1} of ${STRIP.length}`}
                 </span>
               </div>
@@ -1455,7 +1455,7 @@ export function OrderCardItem({
                           }`}
                         />
                         <span
-                          className={`truncate text-[10.5px] font-semibold ${current ? (stopped ? "text-rose-700" : "text-blue-700") : done ? "text-slate-600" : "text-slate-400"}`}
+                          className={`truncate text-[10px] font-semibold ${current ? (stopped ? "text-rose-700" : "text-blue-700") : done ? "text-slate-600" : "text-slate-400"}`}
                         >
                           {STRIP_SHORT[index]}
                         </span>
@@ -1491,12 +1491,12 @@ export function OrderCardItem({
           {(card.warehouse || (warehouse && card.papers.length > 0)) && (
             <div className="mt-2.5 flex flex-wrap gap-1">
               {card.warehouse && (
-                <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10.5px] font-semibold text-emerald-800">
+                <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800">
                   Ships from · {card.warehouse}
                 </span>
               )}
               {card.status === "shipped" && (card.courier || card.rider) && (
-                <span className="rounded bg-sky-50 px-1.5 py-0.5 text-[10.5px] font-semibold text-sky-800">
+                <span className="rounded bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-800">
                   {card.courier
                     ? `${card.courier}${card.tracking ? ` · ${card.tracking}` : ""}`
                     : `Rider · ${card.rider}`}
@@ -1504,7 +1504,7 @@ export function OrderCardItem({
               )}
               {warehouse && card.papers.length > 0 && (
                 <span
-                  className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10.5px] font-semibold text-slate-700"
+                  className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700"
                   title="Papers on file"
                 >
                   <FileCheck2 className="size-3" />{" "}
@@ -2181,11 +2181,11 @@ function OrdersLanes({
                 <Link
                   key={card.id}
                   to={`/orders/${card.id}`}
-                  className="block rounded-xl border border-slate-200/90 bg-white p-3 text-sm shadow-2xs transition hover:-translate-y-0.5 hover:shadow-md"
+                  className="block rounded-2xl border border-slate-200/90 bg-white p-3 text-sm shadow-sm transition-[border-color,box-shadow] hover:border-emerald-300 hover:shadow-md"
                 >
                   <div className="flex items-start gap-2.5">
                     <span
-                      className={`grid size-8 shrink-0 place-items-center rounded-full text-[11px] font-bold ring-1 ring-black/5 ring-inset ${avatarTone(card.customer)}`}
+                      className={`grid size-8 shrink-0 place-items-center rounded-xl text-[11px] font-bold shadow-2xs ${avatarTone(card.customer)}`}
                     >
                       {initials(card.customer)}
                     </span>
@@ -2198,7 +2198,7 @@ function OrdersLanes({
                           {peso(card.total)}
                         </span>
                       </div>
-                      <div className="mt-0.5 truncate text-xs text-stone-500">
+                      <div className="mt-0.5 truncate text-[11px] font-medium text-slate-500">
                         {card.code} · {card.pap ? "PAP · GL" : card.via ? `Online · ${card.via.source}` : (card.channel ?? card.customerKind)}
                       </div>
                     </div>
@@ -2206,8 +2206,8 @@ function OrdersLanes({
                   <p className="mt-1.5 truncate text-[11px] text-slate-600" title={card.lines}>
                     {card.lines}
                   </p>
-                  <div className="mt-2 flex items-center justify-between border-t border-stone-100 pt-2 text-[11px] font-medium text-stone-400">
-                    <span className="truncate text-stone-500">{placedBy(card)}</span>
+                  <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2 text-[10px] font-medium text-slate-400">
+                    <span className="truncate text-slate-500">{placedBy(card)}</span>
                     <span className="shrink-0">{dayLabel(card.placedOn)}</span>
                   </div>
                 </Link>
