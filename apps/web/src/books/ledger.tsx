@@ -13,6 +13,7 @@ import { useMe } from "../auth";
 import { useAction } from "../ui";
 import { Plain, Primary, ZIN, ZPage, ZRow } from "./forms";
 import { LEDGER_ROLES, zDate, zMoney } from "./kinds";
+import { BirBillTaxSection, useBirTaxDraft } from "./bir/tax-fields";
 
 export const useLedgerChoices = () =>
   useQuery({ queryKey: ["books", "ledger-choices"], queryFn: () => api<LedgerChoices>("/api/books-ledger-choices"), staleTime: 60_000 });
@@ -96,8 +97,16 @@ export function NewExpensePage() {
     department: "",
     supplierId: "",
   });
+  const pickedSupplier = choices?.vendors.find((v) => String(v.id) === form.supplierId);
+  const birTax = useBirTaxDraft("services", pickedSupplier?.name ?? null);
   if (!choices) return <Loading />;
   const shown = itemize ? rows : rows.slice(0, 1);
+  const subTotal = shown.reduce((sum, row) => {
+    const amount = cents(row.amount);
+    const tax = choices.taxes.find((t) => String(t.id) === row.taxId);
+    const taxAmt = tax ? Math.round(form.taxInclusive ? (amount * tax.pct) / (100 + tax.pct) : (amount * tax.pct) / 100) : 0;
+    return sum + amount - (form.taxInclusive ? taxAmt : 0);
+  }, 0);
   const total = shown.reduce((sum, row) => {
     const amount = cents(row.amount);
     const tax = choices.taxes.find((t) => String(t.id) === row.taxId);
@@ -130,6 +139,7 @@ export function NewExpensePage() {
                     pic: form.pic,
                     voucher: form.voucher || null,
                     orNumber: form.orNumber || null,
+                    birTax: birTax.toPayload(subTotal, total),
                   },
                 });
                 await done(made.id);
@@ -257,6 +267,7 @@ export function NewExpensePage() {
           <textarea className={`${ZIN} h-16 py-2`} value={form.notes} onChange={(event) => set("notes", event.target.value)} />
         </ZRow>
       </div>
+      <BirBillTaxSection draft={birTax.draft} setDraft={birTax.setDraft} subTotalCentavos={subTotal} totalCentavos={total} />
       <div className="border-t border-[#ebeaf2] px-5 py-3">
         <ZRow label="Cost Centre" required error={action.at("costCentre")}>
           <Select value={form.costCentre} onChange={(value) => set("costCentre", value)} options={choices.options["Cost Centre"] ?? []} placeholder="Select" />

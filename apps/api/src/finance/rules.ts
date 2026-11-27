@@ -21,13 +21,14 @@ export const METHOD_LABEL: Record<PaymentMethod, string> = {
   deduction: "Deducted by the customer",
 };
 /** Why a customer deducted (Modern Trade's chains, mostly). */
-export const DEDUCTION_LABEL: Record<DeductionKind, string> = {
+export const DEDUCTION_LABEL: Record<DeductionKind | "retention", string> = {
   near_expiry: "Near-expiry goods kept",
   listing_fee: "Listing fee",
   promo: "Promo / rebate",
   penalty: "Penalty",
   other: "Other",
   gl_waived: "Guarantee letter shortfall let go",
+  retention: "Contract retention (1%)",
 };
 export const METHODS = Object.keys(METHOD_LABEL) as PaymentMethod[];
 /** What a person records by hand: points are paid only by the points the order used; tax withheld

@@ -2,7 +2,7 @@
 -- will be added to their customer informations"): a business's BIR 2303, LTO permit and business
 -- permit, picked on the order instead of one "their papers"; a patient's prescription, valid ID and
 -- senior / PWD ID. Each one attached to an order is kept on the customer too, as the same file,
--- with the order paper it came from. Safe to run again.
+-- with the order paper it came from. Safe to run again (it was 0167).
 alter table order_file drop constraint if exists order_file_kind_check;
 --> statement-breakpoint
 alter table order_file add constraint order_file_kind_check check (kind in

@@ -25,7 +25,9 @@ import type {
   Me,
   TransferInput,
 } from "../types";
-import { LEDGER_ROLES } from "./accounts";
+import { accountNamed, LEDGER_ROLES } from "./accounts";
+import { saveDocBirTaxMeta } from "../bir/doc-tax";
+import { ownCompanyCode, ownCompanyName } from "../companies/context";
 import { day, insertLines, link, linesOf, nextNumber } from "./actions";
 
 const clean = (text?: string | null) => text?.trim() || null;
@@ -55,21 +57,6 @@ export async function assertOpen(tx: Runner, kind: string, date: string): Promis
       `${lock.module === "all" ? "The books are" : `${module[0]?.toUpperCase()}${module.slice(1)} is`} locked up to ${lock.lockDate}: ask Finance to unlock it first.`,
       "date",
     );
-}
-
-/** An account by name, as the chart has it; money accounts must be bank, cash or card. */
-async function accountNamed(tx: Runner, name: string | null | undefined, field: string, money = false): Promise<string> {
-  const wanted = clean(name);
-  if (!wanted) throw new Refusal(400, "invalid", money ? "Pick the account the money went through." : "Pick an account.", field);
-  const [found] = await rows<{ name: string; type: string; active: boolean }>(
-    tx,
-    sql`select name, type, active from book_account where lower(name) = lower(${wanted})`,
-  );
-  if (!found) throw new Refusal(400, "invalid", "Pick an account from the chart.", field);
-  if (!found.active) throw new Refusal(400, "invalid", `${found.name} is inactive.`, field);
-  if (money && !MONEY_TYPES.includes(found.type) && !["Employee Reimbursements", "Undeposited Funds"].includes(found.name))
-    throw new Refusal(400, "invalid", `${found.name} is not a bank, cash or card account.`, field);
-  return found.name;
 }
 
 async function optionOf(tx: Runner, field: string, value: string | null | undefined, key: string): Promise<string> {
@@ -145,6 +132,22 @@ async function plainLine(
 
 // ------------------------------------------------------------------ the forms' choices
 
+/** Zoho's choices that name a company (Cost Centre GetMEDS0001 / 2MG0001 / Cenevo0001, Company
+ *  Getmeds / 2MG) came into every company's database. Since the separation each database is one
+ *  company, so its forms offer only its own (Aryan, 27 Nov). Earlier documents keep what they say. */
+const OWN_COMPANY_FIELDS = ["Cost Centre", "Company"];
+const plain = (text: string) => text.toLowerCase().replace(/[^a-z0-9]/g, "");
+export function ownCompanysOnly(values: string[], names: string[] = [ownCompanyName(), ownCompanyCode()]): string[] {
+  const own = names.map(plain).filter(Boolean);
+  const mine = values.filter((value) => {
+    // "2MG0001" → "2mg", "GetMEDS0001" → "getmeds", "Getmeds" → "getmeds".
+    const head = plain(value).replace(/\d+$/, "");
+    return head.length >= 2 && own.some((name) => name.startsWith(head));
+  });
+  // A company none of them names (a new one) keeps the list rather than an empty, unsaveable form.
+  return mine.length ? mine : values;
+}
+
 export async function ledgerChoices(db: Database, me: Me): Promise<LedgerChoices> {
   allow(me, LEDGER_ROLES, "write the books");
   const [accounts, taxes, options, people, vendors, expense, journal, transfer, deposit, creditNote, refund, locks] = await Promise.all([
@@ -167,6 +170,7 @@ export async function ledgerChoices(db: Database, me: Me): Promise<LedgerChoices
   ]);
   const grouped: Record<string, string[]> = {};
   for (const { field, value } of options) (grouped[field] ??= []).push(value);
+  for (const field of OWN_COMPANY_FIELDS) if (grouped[field]) grouped[field] = ownCompanysOnly(grouped[field]);
   return {
     today: todayManila(),
     accounts,
@@ -248,6 +252,7 @@ export async function createExpense(db: Database, me: Me, input: BookExpenseInpu
     });
     for (const [n, line] of lines.entries())
       await plainLine(tx, id, n + 1, { account: line.account, description: line.description, amount: line.amount, taxName: line.tax?.name, taxPct: line.tax?.pct, taxAmount: line.taxAmount });
+    await saveDocBirTaxMeta(tx, me, id, { kind: "expense", totalCentavos: total, subTotalCentavos: subTotal, fxRate: 1, partyName: supplier?.name ?? null }, input.birTax);
     return { id };
   });
 }

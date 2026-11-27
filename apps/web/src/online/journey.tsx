@@ -1,9 +1,10 @@
 // biome-ignore-all lint/a11y/useSemanticElements: The interactive journey stops are SVG groups; HTML buttons cannot be nested inside SVG geometry.
-// The case as a map, brought over from the old CRM as it was (frontend/components/lead-journey.tsx):
-// one line from the enquiry through the conversation, the quote and the prescription; then the
-// road forks by how the patient pays — up through the agency (apply, then the letter verified),
-// down through the senior / PWD discount, or straight on for a regular sale — and the roads meet
-// again at the order and its delivery. The road this patient is on is drawn in colour, the others
+// The case as a map, brought over from the old CRM (frontend/components/lead-journey.tsx), the
+// papers first (Aryan, 27 Nov: "the documents are checked first of all"): from the enquiry the
+// prescription is checked straight on (a regular sale, and a guarantee letter's), or the senior /
+// PWD ID and Rx below; then the conversation and the quotation; a guarantee letter then goes up
+// through the agency (apply, then the letter verified) — and the roads meet again at the order
+// and its delivery. The road this patient is on is drawn in colour, the others
 // stay faint; a stop opens the step it belongs to. Its stops come from the old journey rules
 // (`@2mg/api/journey`), fed by the case.
 
@@ -34,21 +35,23 @@ const TOP_Y = 44;
 const BOTTOM_Y = 180;
 const X = {
   enquiry: 55,
-  talk: 190,
-  quote: 325,
-  apply: 455,
-  verified: 610,
-  docs: 535,
-  rx: 535,
-  order: 750,
-  packed: 860,
-  pickup: 970,
-  photo: 1080,
-  claim: 1190,
-  paid: 1300,
+  rx: 190,
+  docs: 190,
+  talk: 325,
+  quote: 460,
+  apply: 590,
+  verified: 720,
+  order: 850,
+  packed: 960,
+  pickup: 1070,
+  photo: 1180,
+  claim: 1290,
+  paid: 1400,
   /** Paid, on the roads that end at the delivery's payment. */
-  paidShort: 1090,
+  paidShort: 1180,
 };
+/** The map's height: room under the discount road for its name. */
+const HEIGHT = 262;
 
 const VIA: Record<string, string> = {
   email: "email",
@@ -213,7 +216,7 @@ export function LeadJourney({
           ? undefined
           : order
             ? "checked on the order"
-            : "verify before ordering",
+            : "check it first",
     rx: rxNotNeeded ? "not needed" : rxDone ? "on file" : "prescription to file",
     order: order
       ? String(order.code ?? "")
@@ -313,21 +316,26 @@ export function LeadJourney({
   };
   const reached = (from: string, to: string) =>
     at(from).state === "done" && at(to).state !== "todo";
-  const seg = (from: string, to: string, road: "agency" | "discount" | "regular" | "main") => ({
+  type Lane = "agency" | "discount" | "regular";
+  // A piece of road and the roads that walk it ("main" is every road's).
+  const seg = (from: string, to: string, lanes: Lane[] | "main") => ({
     d: line(at(from), at(to)),
-    road,
+    lanes,
     lit: reached(from, to),
   });
-  const roads: { d: string; road: "agency" | "discount" | "regular" | "main"; lit: boolean }[] = [
-    seg("enquiry", "talk", "main"),
+  const roads: { d: string; lanes: Lane[] | "main"; lit: boolean }[] = [
+    // The papers first: the prescription straight on (regular, and a guarantee letter's), the
+    // senior / PWD ID and Rx below.
+    seg("enquiry", "rx", ["regular", "agency"]),
+    seg("rx", "talk", ["regular", "agency"]),
+    seg("enquiry", "docs", ["discount"]),
+    seg("docs", "talk", ["discount"]),
     seg("talk", "quote", "main"),
-    seg("quote", "apply", "agency"),
-    seg("apply", "verified", "agency"),
-    seg("verified", "order", "agency"),
-    seg("quote", "rx", "regular"),
-    seg("rx", "order", "regular"),
-    seg("quote", "docs", "discount"),
-    seg("docs", "order", "discount"),
+    // After the quotation a guarantee letter goes up through the agency; the others straight on.
+    seg("quote", "apply", ["agency"]),
+    seg("apply", "verified", ["agency"]),
+    seg("verified", "order", ["agency"]),
+    seg("quote", "order", ["regular", "discount"]),
     seg("order", "packed", "main"),
     seg("packed", "pickup", "main"),
     ...(road === "agency"
@@ -338,7 +346,7 @@ export function LeadJourney({
         ]
       : [seg("pickup", "paid", "main")]),
   ];
-  const roadOn = (r: (typeof roads)[number]["road"]) => r === "main" || r === road;
+  const roadOn = (lanes: (typeof roads)[number]["lanes"]) => lanes === "main" || lanes.includes(road);
 
   const journeyColor =
     road === "agency"
@@ -410,7 +418,7 @@ export function LeadJourney({
           </div>
           <div className="hidden border-t border-slate-100 bg-slate-50/50 px-3 py-1 sm:block">
             <svg
-              viewBox={`0 0 ${mapWidth} 248`}
+              viewBox={`0 0 ${mapWidth} ${HEIGHT}`}
               // One scale on every road (the shorter roads' map is narrower,
               // not drawn larger): at most 0.9 px per unit, as before.
               style={{ maxWidth: Math.round(mapWidth * 0.9) }}
@@ -430,7 +438,7 @@ export function LeadJourney({
               </text>
               <text
                 x={36}
-                y={223}
+                y={HEIGHT - 10}
                 textAnchor="start"
                 className={`text-[11px] font-semibold uppercase tracking-wider ${road === "discount" ? journeyLabelColor : "fill-slate-400"}`}
               >
@@ -452,13 +460,13 @@ export function LeadJourney({
                   strokeWidth={r.lit ? 3 : 2}
                   strokeLinecap="round"
                   className={
-                    r.lit && roadOn(r.road)
+                    r.lit && roadOn(r.lanes)
                       ? journeyColor
-                      : roadOn(r.road)
+                      : roadOn(r.lanes)
                         ? "stroke-slate-300"
                         : "stroke-slate-200"
                   }
-                  strokeDasharray={roadOn(r.road) ? undefined : "4 6"}
+                  strokeDasharray={roadOn(r.lanes) ? undefined : "4 6"}
                 />
               ))}
               {stops.map((st) => {

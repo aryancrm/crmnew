@@ -10,6 +10,8 @@ import { Ban, Plus, Trash2, Wallet } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { useMe } from "../auth";
+import { LEDGER_ROLES } from "../books/kinds";
 import { EmptyState, NoInvoicesArt, NoResults } from "../no-results";
 import { useChoices, useMay } from "../books/forms";
 import { Button, count, PageHead, PageState, Problem, Tabs, useAction } from "../ui";
@@ -72,8 +74,12 @@ export function DocListPage({ kind }: { kind: DocKind }) {
   };
   const data = query.data;
   const word = LIST[kind];
+  // Finance, the CEO and the Admin make a bill on Books' own form, the one with the BIR part (the
+  // supplier's origin, VAT, tax code and 2307; Aryan, 27 Nov). Inventory keeps this one.
+  const role = useMe().data?.role;
+  const billPath = role && LEDGER_ROLES.includes(role) ? "/books/bills/new" : "/purchases/bills/new";
   const newPath =
-    kind === "bill" && may.bill ? "/purchases/bills/new" : kind === "vendor_payment" && may.pay ? "/purchases/payments/new" : kind === "vendor_credit" && may.pay ? "/purchases/credits/new" : null;
+    kind === "bill" && may.bill ? billPath : kind === "vendor_payment" && may.pay ? "/purchases/payments/new" : kind === "vendor_credit" && may.pay ? "/purchases/credits/new" : null;
   return (
     <div className="mx-auto flex max-w-[88rem] flex-col gap-4">
       {kind === "purchase_receive" && (

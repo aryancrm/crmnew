@@ -123,6 +123,10 @@ import { MySamplesPage, TeamSamplesPage } from "./inventory/samples";
 import { ComplaintsPage } from "./regulatory/complaints";
 import { BillFromOrderPage, NewBillPage, NewPaymentPage, NewReceiptPage, NewPurchaseOrderPage, NewVendorCreditPage, NewVendorPage, ReceivePage } from "./books/forms";
 import { BankStatementPage, ReconcilePage } from "./books/bank";
+import { BirCertificatesPage } from "./books/bir/certificates";
+import { BirReadinessPage } from "./books/bir/readiness";
+import { BirReturnsPage } from "./books/bir/returns";
+import { BirSettingsPage } from "./books/bir/settings";
 import { BooksHome } from "./books/home";
 import { LockingPage, NewCreditNotePage, NewDepositPage, NewExpensePage, NewJournalPage, NewTransferPage } from "./books/ledger";
 import { BidReportPage } from "./sellers/bid-report";
@@ -232,6 +236,11 @@ createRoot(root).render(
             <Route path="banking" element={<BankingPage />} />
             <Route path="reports" element={<ReportsPage />} />
             <Route path="reports/:report" element={<ReportsPage />} />
+            <Route path="bir" element={<Navigate to="/books/bir/readiness" replace />} />
+            <Route path="bir/readiness" element={<BirReadinessPage />} />
+            <Route path="bir/returns" element={<BirReturnsPage />} />
+            <Route path="bir/certificates" element={<BirCertificatesPage />} />
+            <Route path="bir/settings" element={<BirSettingsPage />} />
             <Route path=":list" element={<BookListPage />} />
             <Route path=":list/:id" element={<BookListPage />} />
           </Route>

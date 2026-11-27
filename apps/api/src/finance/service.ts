@@ -4,6 +4,7 @@
 // Every change is one transaction that also writes the order's timeline.
 
 import { assertOpen } from "../books/write";
+import { CWT_STATUTORY_BP, sawtFormForAtc } from "../bir/ewt";
 import { keepFile } from "../files/store";
 import { releaseCredit } from "./credit";
 import { awaitingPaymentSql, duesSql, notDueSql, refundsOwedCountSql } from "./dues";
@@ -493,9 +494,18 @@ async function addPayment(
     proofId?: number | null;
     moneyAccount?: string | null;
     payer?: "agency" | "patient" | null;
+    bankCharges?: number | null;
+    paymentGroupId?: string | null;
+    taxAtc?: string | null;
+    sawtForm?: "1702Q" | "2550Q" | null;
+    deductionKind?: string | null;
   },
 ) {
   const into = NOT_CASH_SET.has(input.method) ? null : await moneyAccountOf(tx, input.moneyAccount);
+  const bankCharges = NOT_CASH_SET.has(input.method) ? 0 : Math.max(0, Math.round(input.bankCharges ?? 0));
+  if (bankCharges > 0 && bankCharges >= input.amount) {
+    throw new Refusal(400, "invalid", "Bank charges must be less than the amount received.", "bankCharges");
+  }
   // On a guarantee letter's order the money is the agency's, unless Finance says the patient paid
   // it (the rest of a letter paid short, Aryan 22 Nov). A PAP case's order has no lead_id, so the
   // order's own type says it is a guarantee letter's.
@@ -506,9 +516,10 @@ async function addPayment(
   const payer =
     input.method !== "points" && input.method !== "deduction" && road?.gl && input.payer !== "patient" ? "agency" : "customer";
   await tx.execute(
-    sql`insert into payment (invoice_id, customer_id, amount, method, reference, paid_on, proof_id, note, by_person, payer, money_account)
+    sql`insert into payment (invoice_id, customer_id, amount, method, reference, paid_on, proof_id, note, by_person, payer, money_account, bank_charges, payment_group_id, tax_atc, sawt_form, deduction_kind)
       values (${invoice.id}, ${invoice.customerId}, ${input.amount}, ${input.method}, ${clean(input.reference)}, ${input.paidOn}::date,
-        ${input.proofId ?? null}, ${clean(input.note)}, ${me.id}, ${payer}, ${into})`,
+        ${input.proofId ?? null}, ${clean(input.note)}, ${me.id}, ${payer}, ${into}, ${bankCharges}, ${clean(input.paymentGroupId)},
+        ${clean(input.taxAtc)}, ${input.sawtForm ?? null}, ${input.deductionKind ?? null})`,
   );
   const [after] = await rows<{ paid: number; total: number }>(
     tx,
@@ -807,7 +818,8 @@ export async function recordPayment(
   allow(me, FINANCE_ROLES, "record a payment");
   // Nothing in cash is fine when the whole of it is tax withheld or a deduction (a guarantee
   // letter's shortfall let go after the agency paid short).
-  const noCash = input.amount === 0 && ((input.withheld ?? 0) > 0 || (input.deducted ?? 0) > 0);
+  const noCash =
+    input.amount === 0 && ((input.withheld ?? 0) > 0 || (input.deducted ?? 0) > 0 || (input.retention ?? 0) > 0);
   if (noCash) {
     if (input.paidOn > todayManila()) throw new Refusal(400, "invalid", "That day hasn't come yet.", "paidOn");
   } else payable(input);
@@ -844,12 +856,17 @@ export async function recordPayment(
       );
     const withheld = Math.max(0, Math.round(input.withheld ?? 0));
     const deducted = Math.max(0, Math.round(input.deducted ?? 0));
-    if (input.amount + withheld + deducted > owed)
+    const retention = Math.max(0, Math.round(input.retention ?? 0));
+    const rawAtc = clean(input.taxAtc)?.toUpperCase() ?? null;
+    if (rawAtc && !(rawAtc in CWT_STATUTORY_BP)) {
+      throw new Refusal(400, "invalid", `Unknown BIR ATC code: ${rawAtc}.`, "taxAtc");
+    }
+    if (input.amount + withheld + deducted + retention > owed)
       throw new Refusal(
         400,
         "invalid",
         `That is more than the ${peso(owed)} still owed on ${invoice.code}.`,
-        deducted ? "deducted" : withheld ? "withheld" : "amount",
+        retention ? "retention" : deducted ? "deducted" : withheld ? "withheld" : "amount",
       );
     if (withheld && !clean(input.form2307))
       throw new Refusal(400, "invalid", "Type the BIR Form 2307's number for the tax withheld.", "form2307");
@@ -872,8 +889,23 @@ export async function recordPayment(
         method: "withholding",
         reference: clean(input.form2307),
         paidOn: input.paidOn,
-        note: null,
+        note: rawAtc ? `ATC ${rawAtc}` : null,
         proofId: null,
+        taxAtc: rawAtc,
+        sawtForm: rawAtc ? sawtFormForAtc(rawAtc) : "1702Q",
+        paymentGroupId: input.paymentGroupId,
+      }));
+    // 1% hospital / government retention security deposit: settles normal AR into Retention Receivable.
+    if (retention)
+      ({ left } = await addPayment(tx, me, invoice, {
+        amount: retention,
+        method: "deduction",
+        reference: clean(input.retentionRef),
+        paidOn: input.paidOn,
+        note: DEDUCTION_LABEL.retention,
+        proofId: null,
+        deductionKind: "retention",
+        paymentGroupId: input.paymentGroupId,
       }));
     // What the customer deducted (a chain's near-expiry return kept, a listing fee…) settles the
     // invoice too, never as cash.
@@ -885,24 +917,23 @@ export async function recordPayment(
         paidOn: input.paidOn,
         note: DEDUCTION_LABEL[input.deductionKind as DeductionKind],
         proofId: null,
+        deductionKind: input.deductionKind,
+        paymentGroupId: input.paymentGroupId,
       }));
-      await tx.execute(
-        sql`update payment set deduction_kind = ${input.deductionKind} where id = (select max(id) from payment where invoice_id = ${invoice.id} and method = 'deduction')`,
-      );
     }
     await logEvent(
       tx,
       invoice.orderId,
       me,
       "payment",
-      `${noCash ? "Nothing in cash" : `${how(input)}${input.payer === "patient" ? " (paid by the patient)" : ""}`}${withheld ? `, and ${peso(withheld)} tax withheld (Form 2307 ${clean(input.form2307)})` : ""}${
+      `${noCash ? "Nothing in cash" : `${how(input)}${input.payer === "patient" ? " (paid by the patient)" : ""}${input.bankCharges ? ` (less ${peso(input.bankCharges)} bank fee)` : ""}`}${withheld ? `, and ${peso(withheld)} tax withheld (Form 2307 ${clean(input.form2307)}${rawAtc ? `, ${rawAtc}` : ""})` : ""}${retention ? `, and ${peso(retention)} held as retention` : ""}${
         deducted
           ? input.deductionKind === "gl_waived"
             ? // The company lets a guarantee letter's shortfall go: nobody deducted it.
               `, and ${peso(deducted)} let go by the company (the guarantee letter was paid short)`
             : `, and ${peso(deducted)} deducted by the customer (${DEDUCTION_LABEL[input.deductionKind as DeductionKind].toLowerCase()}${clean(input.deductionRef) ? `, memo ${clean(input.deductionRef)}` : ""})`
           : ""
-      } ${noCash && !withheld && input.deductionKind === "gl_waived" ? "on" : "received for"} ${invoice.code}. ${left > 0 ? `${peso(left)} still owed.` : "Paid in full."}`,
+      } ${noCash && !withheld && !retention && input.deductionKind === "gl_waived" ? "on" : "received for"} ${invoice.code}. ${left > 0 ? `${peso(left)} still owed.` : "Paid in full."}`,
       left > 0 ? null : "paid",
     );
     if (left === 0) {

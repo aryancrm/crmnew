@@ -8,7 +8,7 @@
 
 import { Avatar } from "../account/avatar";
 import { SignedOut } from "../account/signed-out";
-import { ArrowLeft, BarChart3, BookOpen, BookOpenCheck, ChevronDown, ChevronRight, HandCoins, House, Landmark, PackageOpen, Plus, Search, ShoppingBag, ShoppingBasket, ShoppingCart } from "lucide-react";
+import { ArrowLeft, BarChart3, BookOpen, BookOpenCheck, ChevronDown, ChevronRight, FileSpreadsheet, HandCoins, House, Landmark, PackageOpen, Plus, Search, ShoppingBag, ShoppingBasket, ShoppingCart } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { LeavesArrow, useLeavesTo } from "../app-switch";
@@ -122,6 +122,17 @@ const GROUPS: NavGroup[] = [
       { label: "Stock by Age", to: "/books/reports/stock-aging" },
     ],
   },
+  {
+    label: "BIR & Tax",
+    icon: <FileSpreadsheet size={16} />,
+    ledger: true,
+    items: [
+      { label: "BIR Readiness", to: "/books/bir/readiness", ledger: true },
+      { label: "Returns & Books", to: "/books/bir/returns", ledger: true },
+      { label: "2307 Certificates", to: "/books/bir/certificates", ledger: true },
+      { label: "Taxpayer & ATC", to: "/books/bir/settings", ledger: true },
+    ],
+  },
 ];
 
 /** Who opens the books: the stock and money desks (the API checks it on every call too). */
@@ -135,7 +146,7 @@ export function BooksShell() {
   const segment = location.pathname.split("/")[2];
   const openGroup =
     GROUPS.find((group) => group.items.some((item) => item.to === `/books/${segment}` || (segment === "finance" && location.pathname.startsWith(item.to))))?.label ??
-    (segment === "banking" || segment === "bankstatement" || segment === "reconcile" ? "Banking" : segment === "reports" ? "Reports" : !segment || segment === "home" ? "" : "Purchases");
+    (segment === "banking" || segment === "bankstatement" || segment === "reconcile" ? "Banking" : segment === "bir" ? "BIR & Tax" : segment === "reports" ? "Reports" : !segment || segment === "home" ? "" : "Purchases");
   const [open, setOpen] = useState<Record<string, boolean>>({ [openGroup]: true });
   if (me.isPending) return null;
   if (!me.data) return <SignedOut />;
@@ -145,7 +156,7 @@ export function BooksShell() {
   const reportsLeave = leavesTo("/reports");
   const groups = GROUPS.filter((group) => ledger || !group.ledger).map((group) => ({ ...group, items: group.items.filter((item) => ledger || !item.ledger) }));
   const listName =
-    segment === "home" ? "Customers" : segment === "finance" ? "Customers" : segment === "vendors" ? "Vendors" : segment === "customers" ? "Customers" : segment === "items" ? "Items" : segment === "accounts" ? "Chart of Accounts" : segment === "locking" ? "Transaction Locking" : segment === "bankstatement" || segment === "reconcile" ? "Banking" : segment === "banking" ? "Banking" : segment === "reports" ? "Reports" : (kindByPath(segment)?.plural ?? "Purchases");
+    segment === "home" ? "Customers" : segment === "finance" ? "Customers" : segment === "vendors" ? "Vendors" : segment === "customers" ? "Customers" : segment === "items" ? "Items" : segment === "accounts" ? "Chart of Accounts" : segment === "locking" ? "Transaction Locking" : segment === "bankstatement" || segment === "reconcile" ? "Banking" : segment === "banking" ? "Banking" : segment === "bir" ? "BIR & Tax" : segment === "reports" ? "Reports" : (kindByPath(segment)?.plural ?? "Purchases");
   return (
     <div className="flex h-dvh overflow-hidden bg-white font-sans text-[13px] leading-[1.6] text-black">
       <nav aria-label="Books menu" className="flex w-[220px] shrink-0 flex-col overflow-y-auto bg-[#21263c] pb-4 text-[#f0f0f0] print:hidden">

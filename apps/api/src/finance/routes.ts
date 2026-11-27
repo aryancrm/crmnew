@@ -59,9 +59,16 @@ const paymentInput = z.object({
   proofId: z.number().int().positive().nullish(),
   // The bank, cash or e-wallet account it went into.
   moneyAccount: optional(120),
-  // Tax the customer withheld (EWT) with its BIR Form 2307 number.
+  // Tax the customer withheld (EWT) with its BIR Form 2307 number and optional ATC.
   withheld: z.number().int().min(0).nullish(),
   form2307: optional(60),
+  taxAtc: optional(20),
+  // Bank transfer fee deducted by the bank (posted to Bank Fees and Charges) & shared slip batch ID.
+  bankCharges: z.number().int().min(0).nullish(),
+  paymentGroupId: optional(80),
+  // 1% hospital / government contract retention held until clearance (posted to Retention Receivable).
+  retention: z.number().int().min(0).nullish(),
+  retentionRef: optional(60),
   // What the customer deducted, why, and their debit memo.
   deducted: z.number().int().min(0).nullish(),
   deductionKind: z.enum(["near_expiry", "listing_fee", "promo", "penalty", "other", "gl_waived"]).nullish(),

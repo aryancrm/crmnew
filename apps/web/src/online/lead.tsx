@@ -13,6 +13,7 @@ import type {
   LeadCase,
   LeadInput,
   LeadPaper,
+  OrderDetail,
   QuoteLine,
   Vat,
 } from "@2mg/api/types";
@@ -56,6 +57,8 @@ import { AGENCIES, LeadForm, RELATIONS, uploadLeadFile } from "./parts";
 import { WebsiteOrderCard } from "./website";
 import { MedicineFinder, packWord, unitWord } from "../orders/medicine-finder";
 import { SendToCustomer } from "../orders/send-update";
+import { MoneySummary } from "../orders/money";
+import { MoneyCard as OrderMoneyCard } from "../orders/steps/side";
 import { PAPER_ACCEPT } from "../photo";
 import {
   Button,
@@ -76,11 +79,12 @@ import { EmptyState, NoInvoicesArt } from "../no-results";
 type StepKey = "docs" | "quote" | "apply" | "letter" | "order" | "pay";
 
 /** The step a case opens on, from where it stands. */
-/** The step a case opens on: the one its next action is in (18 Nov: the steps in the journey's
- *  order, the enquiry and its quotation first, then the prescription and papers). */
+/** The step a case opens on: the one its next action is in. The papers come first (Aryan, 27 Nov:
+ *  "the documents are checked first of all"): a new case opens on Rx & documents, and on the
+ *  quotation once the prescription is approved, as the case's own road steps already go. */
 function openingStep(step: string, gl: boolean): StepKey {
-  if (["new", "rx_ok", "quoted"].includes(step)) return "quote";
-  if (["rx_wait", "rx_check", "papers"].includes(step)) return "docs";
+  if (["new", "rx_wait", "rx_check", "papers"].includes(step)) return "docs";
+  if (["rx_ok", "quoted"].includes(step)) return "quote";
   if (gl && step === "apply") return "apply";
   if (gl && (step === "waiting" || step === "verify")) return "letter";
   if (step === "ready" || step === "ordered") return "order";
@@ -167,7 +171,7 @@ export function LeadPage() {
   const quoteSaved = data.quote.lines.length > 0 && !data.quote.stale;
   const orderLive = data.order && data.order.status !== "cancelled" ? data.order : null;
   const done: Record<StepKey, boolean> = {
-    docs: intake.length > 0 ? intake.every((paper) => paper.files.length > 0) : quoteSaved,
+    docs: intake.length > 0 ? intake.every((paper) => paper.files.length > 0) : true,
     quote: quoteSaved,
     apply: Boolean(lead.glAppliedOn),
     letter: Boolean(lead.glVerifiedAt),
@@ -175,16 +179,16 @@ export function LeadPage() {
     pay: data.step.value === "done",
   };
   // The steps in the journey's order, each saying who does it (Aryan, 18 Nov: "what comes where,
-  // and who does what").
+  // and who does what"); the papers first (27 Nov: "the documents are checked first of all").
   const rail: { key: StepKey; number: string; label: string; who?: string; sub?: boolean }[] = [
-    { key: "quote", number: "1", label: "Enquiry & quotation", who: "You answer and quote" },
+    { key: "docs", number: "1", label: "Rx & documents", who: "You collect the papers first" },
+    { key: "quote", number: "2", label: "Enquiry & quotation", who: "You answer and quote" },
     ...(gl
       ? [
-          { key: "apply" as const, number: "1.1", label: "Agency application", sub: true },
-          { key: "letter" as const, number: "1.2", label: "Guarantee letter", sub: true },
+          { key: "apply" as const, number: "2.1", label: "Agency application", sub: true },
+          { key: "letter" as const, number: "2.2", label: "Guarantee letter", sub: true },
         ]
       : []),
-    { key: "docs", number: "2", label: "Rx & documents", who: "You collect the papers" },
     {
       key: "order",
       number: "3",
@@ -636,15 +640,15 @@ export function LeadPage() {
         </aside>
 
         <section className="min-w-0 space-y-4">
-          {step === "docs" && <DocumentsStep data={data} onNext={() => open("order")} />}
+          {step === "docs" && <DocumentsStep data={data} onNext={() => open("quote")} />}
           {step === "quote" && (
-            <QuotationStep data={data} onNext={() => open(gl ? "apply" : "docs")} />
+            <QuotationStep data={data} onNext={() => open(gl ? "apply" : "order")} />
           )}
           {step === "apply" && gl && (
             <GlStep data={data} part="apply" onNext={() => open("letter")} />
           )}
           {step === "letter" && gl && (
-            <GlStep data={data} part="letter" onNext={() => open("docs")} />
+            <GlStep data={data} part="letter" onNext={() => open("order")} />
           )}
           {step === "order" && <OrderStep data={data} onNext={() => open("pay")} />}
           {step === "pay" && <PayStep data={data} onBack={() => open("order")} />}
@@ -900,9 +904,9 @@ function DocumentsStep({ data, onNext }: { data: LeadCase; onNext: () => void })
   );
   return (
     <StepPanel
-      number="2"
+      number="1"
       title="Rx & documents"
-      footer={<NextButton label="Next: Order & delivery" onClick={onNext} />}
+      footer={<NextButton label="Next: Enquiry & quotation" onClick={onNext} />}
     >
       <div className="flex flex-col gap-2.5">
         {intake.length === 0 && (
@@ -1554,11 +1558,11 @@ function QuotationStep({ data, onNext }: { data: LeadCase; onNext: () => void })
     if (done) setDirty(false);
   }
 
-  const nextLabel = lead.road === "gl" ? "Next: 1.1 Agency application" : "Next: Rx & documents";
+  const nextLabel = lead.road === "gl" ? "Next: 2.1 Agency application" : "Next: Order & delivery";
   return (
     <form onSubmit={save}>
       <StepPanel
-        number="1"
+        number="2"
         title="Enquiry & quotation"
         footer={
           <>
@@ -1890,11 +1894,11 @@ function GlStep({
   if (part === "apply")
     return (
       <StepPanel
-        number="1.1"
+        number="2.1"
         title={`${agency?.short ?? "Agency"} application`}
         footer={
           <NextButton
-            label="Next: 1.2 Guarantee letter"
+            label="Next: 2.2 Guarantee letter"
             onClick={onNext}
             disabled={!lead.glAppliedOn}
           />
@@ -1943,9 +1947,9 @@ function GlStep({
 
   return (
     <StepPanel
-      number="1.2"
+      number="2.2"
       title="Guarantee letter"
-      footer={<NextButton label="Next: Rx & documents" onClick={onNext} disabled={!verified} />}
+      footer={<NextButton label="Next: Order & delivery" onClick={onNext} disabled={!verified} />}
     >
       {!lead.glAppliedOn && (
         <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">
@@ -2754,9 +2758,23 @@ function PayStep({ data, onBack }: { data: LeadCase; onBack: () => void }) {
 
 // ---------------------------------------------------------------- side
 
+/** The case's money (Aryan, 27 Nov: "how much it was, what we gave it at, what it came to, how much
+ *  discount — put it everywhere"): once the case has its order, the order's own Money card, as on
+ *  the order's page (its lines as placed or changed, its bill); before it, the quotation's. */
 function MoneyCard({ data }: { data: LeadCase }) {
   const order = data.order && data.order.status !== "cancelled" ? data.order : null;
+  const placed = useQuery({
+    queryKey: ["orders", "one", order?.id],
+    queryFn: () => api<OrderDetail>(`/api/orders/${order?.id}`),
+    enabled: Boolean(order),
+  });
+  if (order && placed.data) {
+    // The letter's amount written on the case shows on its order's card too.
+    const letter = placed.data.order.glAmount ?? (data.lead.road === "gl" ? data.lead.glAmount : null);
+    return <OrderMoneyCard data={{ ...placed.data, order: { ...placed.data.order, glAmount: letter } }} />;
+  }
   if (!order && data.quote.lines.length === 0) return null;
+  const relief = data.quote.relief ? data.quote.relief.vatRemoved + data.quote.relief.discount : 0;
   return (
     <section className="space-y-3 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs">
       <h2 className="border-b border-slate-100 pb-2.5 text-sm font-semibold tracking-tight text-slate-900">
@@ -2765,32 +2783,38 @@ function MoneyCard({ data }: { data: LeadCase }) {
       <dl className="flex flex-col gap-1.5 text-sm">
         {data.quote.lines.map((line) => (
           <div key={line.medicineId} className="flex justify-between gap-3">
-            <dt className="truncate text-slate-600">
-              {line.medicine} × {count(line.qty)}
+            <dt className="min-w-0 text-slate-600">
+              <span className="block truncate">
+                {line.medicine} × {count(line.qty)}
+              </span>
+              {line.unitPrice !== line.listPrice && line.listPrice > 0 && (
+                <span className="block text-xs text-slate-500 tabular-nums">
+                  {peso(line.unitPrice)} each · <span className="font-semibold text-amber-700">list {peso(line.listPrice)}</span>
+                </span>
+              )}
             </dt>
             <dd className="tabular-nums">{peso(line.qty * line.unitPrice)}</dd>
           </div>
         ))}
-        {data.quote.relief && (
-          <div className="flex justify-between gap-3">
-            <dt className="text-slate-600">No VAT and 20% off</dt>
-            <dd className="tabular-nums">
-              −{peso(data.quote.relief.vatRemoved + data.quote.relief.discount)}
-            </dd>
-          </div>
-        )}
-        {(data.web?.money.deliveryFee ?? 0) > 0 && (
-          <div className="flex justify-between gap-3">
-            <dt className="text-slate-600">Delivery fee</dt>
-            <dd className="tabular-nums">{peso(data.web?.money.deliveryFee ?? 0)}</dd>
-          </div>
-        )}
-        <div className="mt-1 flex justify-between gap-3 border-t border-slate-100 pt-1.5 font-semibold">
-          <dt>{order ? "Order total" : "Quotation"}</dt>
-          <dd className="tabular-nums">
-            {peso(order ? order.total : data.quote.total + (data.web?.money.deliveryFee ?? 0))}
-          </dd>
+        <div className="mt-1 flex flex-col gap-1.5 border-t border-slate-100 pt-1.5">
+          <MoneySummary
+            lines={data.quote.lines.map((line) => ({
+              qty: line.qty,
+              listPrice: line.listPrice > 0 ? line.listPrice : line.unitPrice,
+              amount: line.qty * line.unitPrice,
+            }))}
+            reliefOff={relief}
+            deliveryFee={data.web?.money.deliveryFee ?? 0}
+            totalLabel={data.quote.relief ? "Patient pays" : "Quotation total"}
+          />
         </div>
+        {order && (
+          // The order is still loading (or can't be opened here): its total as the case knows it.
+          <div className="flex justify-between gap-3 font-semibold">
+            <dt>Order total</dt>
+            <dd className="tabular-nums">{peso(order.total)}</dd>
+          </div>
+        )}
         {data.lead.road === "regular" && data.points.toUse > 0 && (
           <div className="flex justify-between gap-3 text-emerald-700">
             <dt>{data.points.toUse.toLocaleString("en-PH")} points</dt>

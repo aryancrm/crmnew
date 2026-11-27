@@ -32,6 +32,7 @@ import {
   orderDetail,
   orderAssignments,
   orderForList,
+  orderHistory,
   PAPER_MAX_BYTES,
   placeOrder,
   readPaper,
@@ -226,6 +227,10 @@ export function orderRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHa
   // What this customer was given before for each medicine on the order.
   app.get("/api/orders/:id/prices", async (c) =>
     c.json(await orderPrices(db, c.get("me"), idParam(c))),
+  );
+  // The customer's orders (on their number, for a patient), for the order page's bar.
+  app.get("/api/orders/:id/history", async (c) =>
+    c.json(await orderHistory(db, c.get("me"), idParam(c))),
   );
   salesOrderRoutes(app, db);
 
