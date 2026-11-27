@@ -115,6 +115,8 @@ describe("a team lead's team", () => {
     const mine = await read<MyOrders>("daniel", `/api/orders/mine?seat=${empty?.seatId}`);
     expect(mine.counts.all).toBe(1);
     expect(mine.cards[0]?.customer).toBe("East Avenue Medical Center");
+    // Its HQ, from the seat it was placed from, before the seller's name (PLAN 268).
+    expect(mine.cards[0]?.hq).toBe("Quezon City");
     const theirs = await read<CustomerList>("daniel", `/api/customers?seat=${ryan?.seatId}`);
     expect(theirs.rows.map((row) => row.name)).toContain("Pasay City General");
     expect(theirs.rows.map((row) => row.name)).not.toContain("East Avenue Medical Center");

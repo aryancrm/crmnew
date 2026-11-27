@@ -956,6 +956,9 @@ export type CardItem = {
 export type OrderCard = OrderRow & {
   /** The MedRep the order is for: what Management's queue groups by. */
   medrepId: number;
+  /** The HQ it was placed from (TAFT, ON SITE), shown before the seller's name; none for a lead's
+   *  own order (PLAN 268). */
+  hq: string | null;
   /** Who approves it instead of Management (a PAP order's head); null: Management. */
   approverId: number | null;
   approverName: string | null;

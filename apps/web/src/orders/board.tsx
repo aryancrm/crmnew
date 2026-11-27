@@ -997,6 +997,9 @@ function FinanceSteps({ card }: { card: OrderCard }) {
   );
 }
 
+/** Who placed an order, after the HQ it came from (Aryan's phase 5, PLAN 268): "TAFT · Marwin Dy". */
+const placedBy = (card: OrderCard) => (card.hq ? `${card.hq} · ${card.medrep}` : card.medrep);
+
 export function OrderCardItem({
   card,
   desk = "management",
@@ -1307,7 +1310,7 @@ export function OrderCardItem({
               {showRep && (
                 <span className="inline-flex min-w-0 items-center gap-1">
                   <UserRound className="size-3 shrink-0 text-slate-400" />
-                  <span className="truncate">{card.medrep}</span>
+                  <span className="truncate">{placedBy(card)}</span>
                 </span>
               )}
               {!checking && <Checks card={card} small />}
@@ -2047,7 +2050,7 @@ function OrdersCardTable({
               </th>
             )}
             <th scope="col" className={head}>
-              MedRep
+              HQ · MedRep
             </th>
             <th scope="col" className={head}>
               Channel
@@ -2094,7 +2097,7 @@ function OrdersCardTable({
                   <Checks card={card} small />
                 </td>
               )}
-              <td className="px-3 py-2 text-slate-700">{card.medrep}</td>
+              <td className="px-3 py-2 text-slate-700">{placedBy(card)}</td>
               <td className="px-3 py-2 text-slate-600">
                 {card.channel ?? "—"}
                 {card.via && <div className="text-[11px] font-semibold text-violet-700">Online · {card.via.source}</div>}
@@ -2204,7 +2207,7 @@ function OrdersLanes({
                     {card.lines}
                   </p>
                   <div className="mt-2 flex items-center justify-between border-t border-stone-100 pt-2 text-[11px] font-medium text-stone-400">
-                    <span className="truncate text-stone-500">{card.medrep}</span>
+                    <span className="truncate text-stone-500">{placedBy(card)}</span>
                     <span className="shrink-0">{dayLabel(card.placedOn)}</span>
                   </div>
                 </Link>

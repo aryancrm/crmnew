@@ -97,6 +97,7 @@ import { asksOf, leadsUp } from "./asks";
 import { duesSql } from "../finance/dues";
 import { activeOffers, withOfferLines } from "./offers";
 import { aheadOf, shortLines, shortWords } from "./stock-wait";
+import { hqOf } from "../team/hq-name";
 
 const PAGE = 25;
 const list = (values: readonly string[]): SQL =>
@@ -844,7 +845,9 @@ export async function approvalQueue(db: Database, me: Me): Promise<OrderRow[]> {
   });
 }
 
-type CardRow = Omit<OrderCard, "statusLabel" | "lines" | "items" | "findings" | "step" | "next"> & {
+type CardRow = Omit<OrderCard, "statusLabel" | "lines" | "items" | "findings" | "step" | "next" | "hq"> & {
+  /** The territory of the seat it was placed from (none for a lead's seat), for its HQ. */
+  seatArea: string | null;
   review: string;
   licenceExpired: boolean;
   creditLimit: number | null;
@@ -878,7 +881,8 @@ const cardColumns = sql`${rowColumns}, o.medrep_id::int as "medrepId", ${approve
   to_char(coalesce(o.submitted_at, o.created_at) at time zone 'Asia/Manila', 'YYYY-MM-DD') as "placedOn",
   c.phone as "customerPhone", w.name as warehouse, c.credit_limit::int as "creditLimit", o.held_role as "heldRole",
   o.delivery_method as "deliveryMethod", o.courier, o.tracking, o.rider,
-  coalesce(c.licence_expires < (now() at time zone 'Asia/Manila')::date, false) as "licenceExpired", ${caseColumns}`;
+  coalesce(c.licence_expires < (now() at time zone 'Asia/Manila')::date, false) as "licenceExpired", ${caseColumns},
+  (select sa.name from seat ss join area sa on sa.id = ss.area_id where ss.id = o.seat_id and not ss.lead) as "seatArea"`;
 
 const cardFrom = sql`from sales_order o ${rowJoins}
   left join channel ch on ch.id = o.channel_id
@@ -991,7 +995,7 @@ async function toCards(
       : all;
   };
   return found.map((row) => {
-    const { review, licenceExpired, gl, ...shown } = row;
+    const { review, licenceExpired, gl, seatArea, ...shown } = row;
     const { heldFrom, creditLimit } = row;
     const own = items.filter((item) => item.orderId === row.id);
     const onFile = papers.get(row.id) ?? [];
@@ -1028,6 +1032,8 @@ async function toCards(
     const flagged = row.status === "on_hold" || row.status === "exception";
     return {
       ...labelled(shown),
+      // The HQ it was placed from, before the seller's name on every desk (Aryan's phase 5, PLAN 268).
+      hq: seatArea ? hqOf(seatArea, row.medrep) : null,
       lines: own
         .map(
           (item) =>
