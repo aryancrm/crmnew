@@ -1330,7 +1330,21 @@ function ownDesk(me: Me): Space {
             { to: "/targets", label: "Targets", icon: Target },
             { to: "/collections", label: "Collections", icon: HandCoins },
             ordersLink("Business orders"),
-            folder("Field visits", CalendarCheck, teamFieldItems(), "Visits"),
+            // Four pages, not eleven (Aryan, 28 Nov: "are this many needed? how many repeat?",
+            // PLAN 270): Team today holds what waits for him and links to the visits, tour plans,
+            // expenses, follow-ups, call reports and customers; today's places are in Where the team
+            // is; My own day is Team today's button. The pages stay at their addresses.
+            folder(
+              "Field visits",
+              CalendarCheck,
+              [
+                { to: "/field/team", label: "Team today", icon: Users },
+                { to: "/field/report", label: "Visits report", icon: BarChart3 },
+                { to: "/field/live", label: "Where the team is", icon: MapPin },
+                { to: "/field/samples", label: "Samples & gifts", icon: Gift },
+              ],
+              "Visits",
+            ),
             folder(
               "Attendance",
               CalendarClock,

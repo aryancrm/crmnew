@@ -1,6 +1,9 @@
 // Where the team is now: each field person's last place from their phone while their working day
 // runs (a team lead's team, everyone for the CEO), the visit they are at, and a link to the map.
 // A place older than half an hour, or from a day already ended, isn't shown as where they are.
+// Today's places are here too (Aryan, 28 Nov: "are this many pages needed? how many repeat?",
+// PLAN 270): under each person, the day's places (start, I'm here, close, stop) and its route, as
+// the separate Today's places page had them.
 
 import type { LivePeople } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
@@ -9,6 +12,8 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { EmptyState, NoResults } from "../no-results";
+import type { MapPeople } from "../mr/map";
+import { clockOf, mapLink } from "../mr/parts";
 import { useHqNames } from "../team/hq-name";
 import { CARD, PageHead, PageState } from "../ui";
 
@@ -27,6 +32,9 @@ export function FieldLivePage() {
     queryFn: () => api<LivePeople>("/api/field/where"),
     refetchInterval: 60_000,
   });
+  // The day's places of each person (the phone's at start, I'm here, close and stop).
+  const places = useQuery({ queryKey: ["mr", "map", null, null], queryFn: () => api<MapPeople>("/api/mr/map"), refetchInterval: 60_000 });
+  const dayOf = new Map((places.data?.people ?? []).map((one) => [one.id, one.points]));
   // Each person after their HQ (Aryan's phase 5, PLAN 269); found by it too.
   const { named } = useHqNames();
   const [q, setQ] = useState("");
@@ -45,7 +53,7 @@ export function FieldLivePage() {
     <div className="flex flex-col gap-4">
       <PageHead
         title="Where the team is"
-        sub={`${seen} of ${data.people.length} sharing a place now · ${working} working`}
+        sub={`${seen} of ${data.people.length} sharing a place now · ${working} working · each one's places today under them`}
       />
       <label className="relative flex max-w-xs items-center">
         <Search size={15} className="pointer-events-none absolute left-3 text-slate-400" />
@@ -104,6 +112,7 @@ export function FieldLivePage() {
                 {one.at ? `Last place ${ago(one.at)}` : "No place shared yet"}
               </div>
             )}
+            <TodaysPlaces points={dayOf.get(one.personId) ?? []} />
           </article>
         ))}
         {rows.length === 0 && (
@@ -120,6 +129,38 @@ export function FieldLivePage() {
         A phone shares its place every few minutes while its person's day is started and the app is
         open; it stops when they end their day.
       </p>
+    </div>
+  );
+}
+
+/** One person's places today: the time, what it was (start, I'm here, close, stop), the customer,
+ *  each on the map, and the day's route when there are more. */
+function TodaysPlaces({ points }: { points: MapPeople["people"][number]["points"] }) {
+  if (!points.length) return <div className="border-t border-slate-100 pt-2 text-xs text-slate-400">No place today</div>;
+  return (
+    <div className="border-t border-slate-100 pt-2">
+      <p className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">Today's places</p>
+      <ol className="mt-1 space-y-0.5 text-[12.5px] text-slate-700">
+        {points.map((point) => (
+          <li key={`${point.at}-${point.what}`}>
+            {clockOf(point.at)} · {point.what}
+            {point.client ? ` · ${point.client}` : ""} ·{" "}
+            <a className="text-sky-700 hover:underline" href={mapLink(point.place)} target="_blank" rel="noreferrer">
+              map
+            </a>
+          </li>
+        ))}
+      </ol>
+      {points.length > 1 && (
+        <a
+          className="mt-1 inline-block text-xs font-semibold text-sky-700 hover:underline"
+          target="_blank"
+          rel="noreferrer"
+          href={`https://www.google.com/maps/dir/${points.map((point) => point.place).join("/")}`}
+        >
+          The day's route on the map
+        </a>
+      )}
     </div>
   );
 }

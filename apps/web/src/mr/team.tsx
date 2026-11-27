@@ -116,6 +116,17 @@ export function TeamHome() {
         <Figure label="Hospitals" value={data.clients.hospitals} to="/field/clients?kind=hospital&scope=team" />
       </div>
 
+      {/* The Field visits pages off the menu, a press away (Aryan, 28 Nov: "are this many needed? how
+          many repeat?", PLAN 270): nothing is lost. */}
+      <nav aria-label="More of the field" className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] font-semibold text-sky-700">
+        <Link to={withUnit("/visits?person=all", unit)} className="hover:underline">All visits</Link>
+        <Link to={withUnit("/field/plan?view=team", unit)} className="hover:underline">Tour plans</Link>
+        <Link to={withUnit("/visits/expenses?waiting=1", unit)} className="hover:underline">Expenses</Link>
+        <Link to="/field/follow-ups" className="hover:underline">Follow-ups</Link>
+        <Link to="/field/reports" className="hover:underline">Call reports</Link>
+        <Link to={withUnit("/field/clients?scope=team", unit)} className="hover:underline">Customers</Link>
+      </nav>
+
       {(data.waiting.reports + data.waiting.judge + data.waiting.plans + data.waiting.deviations + data.waiting.expenses + (offList.data?.rows.length ?? 0)) > 0 && (
         <Panel title="Waiting for you">
           <ul className="grid gap-2 p-3 sm:grid-cols-3">
@@ -130,7 +141,7 @@ export function TeamHome() {
       )}
 
       <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-        <Panel title="Today" count={data.people.length} actions={<Link to={withUnit("/field/map", unit)} className="text-xs font-semibold text-sky-700 hover:underline">View all on map</Link>}>
+        <Panel title="Today" count={data.people.length} actions={<Link to="/field/live" className="text-xs font-semibold text-sky-700 hover:underline">Where they are</Link>}>
           <ul className="divide-y divide-slate-100">
             {data.people.map((one) => (
               <li key={one.id}>

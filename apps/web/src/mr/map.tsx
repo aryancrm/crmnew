@@ -12,7 +12,7 @@ import { CARD, PageState } from "../ui";
 import { clockOf, dayWords, MrHead, mapLink } from "./parts";
 import { EmptyState } from "../no-results";
 
-type MapPeople = {
+export type MapPeople = {
   day: string;
   people: {
     id: number;
