@@ -37,6 +37,7 @@ import { greeting, todayWords } from "../home/home";
 import { OrderCardItem } from "../orders/board";
 import { HospitalsCard } from "./hospitals";
 import { MyKpis as KpiPanel } from "../kpis/my-kpis";
+import { allItems, spaceFor } from "../menus";
 import { EmptyState, NoInvoicesArt } from "../no-results";
 import { FieldDayCard } from "../mr/home";
 
@@ -668,9 +669,16 @@ export function MyOrdersPage() {
   const mine = useMine(stage, page, unit, division);
   const data = mine.data;
   const team = me?.role === "team_lead" || me?.role === "manager";
+  // A head's banner names the page as his menu does (Javed's and Subir's "Business orders").
+  const menuName =
+    me?.role === "manager"
+      ? allItems(spaceFor(me, "/orders").groups.flatMap((group) => group.items)).find((item) => item.to === "/orders")?.label
+      : undefined;
   if (!data) return <PageState query={mine} what="your orders" />;
   const pages = Math.max(1, Math.ceil(data.total / data.pageSize));
   const days = [...new Set(data.cards.map((card) => card.placedOn))];
+  // Nothing in any tab: no order placed in this CRM yet (the month's earlier orders came from Zoho).
+  const none = STAGE_TABS.every((tab) => data.counts[tab.key] === 0);
 
   return (
     <div className="mx-auto max-w-screen-2xl">
@@ -708,7 +716,9 @@ export function MyOrdersPage() {
               </span>
               <span aria-hidden="true" className="h-12 w-px shrink-0 bg-slate-200" />
               <div className="min-w-0">
-                <h1 className="text-[32px] leading-tight font-semibold tracking-tight text-ink">{team ? "Team orders" : "My orders"}</h1>
+                <h1 className="text-[32px] leading-tight font-semibold tracking-tight text-ink">
+                  {menuName ?? (team ? "Team orders" : "My orders")}
+                </h1>
                 <p className="mt-0.5 text-[13px] text-slate-500">Pick the customer and the medicines; Management checks it next.</p>
               </div>
             </div>
@@ -849,7 +859,13 @@ export function MyOrdersPage() {
       <div className={`mt-4 space-y-4 ${mine.isPlaceholderData ? "opacity-60" : ""}`}>
         {data.cards.length === 0 ? (
           <div className="rounded-2xl border border-slate-200 bg-white">
-            <EmptyState title="No order here.">Orders in this tab show here. Try another tab.</EmptyState>
+            {team && none ? (
+              <EmptyState title="No order placed in this CRM yet for your team.">
+                This month's earlier orders (from Zoho) are on your Home, under How the orders came and Orders by person.
+              </EmptyState>
+            ) : (
+              <EmptyState title="No order here.">Orders in this tab show here. Try another tab.</EmptyState>
+            )}
           </div>
         ) : (
           days.map((day) => {
@@ -888,7 +904,7 @@ export function MyOrdersPage() {
             <button
               type="button"
               disabled={data.page <= 1}
-              onClick={() => setParams({ stage, page: String(data.page - 1), ...(unit ? { unit } : {}) })}
+              onClick={() => setParams({ stage, page: String(data.page - 1), ...(unit ? { unit } : {}), ...(division ? { division } : {}) })}
               className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-medium disabled:opacity-40"
             >
               Previous
@@ -896,7 +912,7 @@ export function MyOrdersPage() {
             <button
               type="button"
               disabled={data.page >= pages}
-              onClick={() => setParams({ stage, page: String(data.page + 1), ...(unit ? { unit } : {}) })}
+              onClick={() => setParams({ stage, page: String(data.page + 1), ...(unit ? { unit } : {}), ...(division ? { division } : {}) })}
               className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-medium disabled:opacity-40"
             >
               Next

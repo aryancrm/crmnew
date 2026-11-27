@@ -1366,7 +1366,9 @@ async function warehouseFill(db: Runner, orderId: number): Promise<OrderDetail["
 
 export async function orderDetail(db: Database, me: Me, id: number): Promise<OrderDetail> {
   const [order] = await rows<
-    Omit<OrderDetail["order"], "statusLabel" | "invoiceFromLabel"> & {
+    Omit<OrderDetail["order"], "statusLabel" | "invoiceFromLabel" | "hq"> & {
+      /** The territory of the seat it was placed from (none for a lead's seat), for its HQ. */
+      seatArea: string | null;
       raisedById: number;
       medrepId: number;
       licenceExpired: boolean;
@@ -1406,6 +1408,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
           as "holdProofs",
         raiser.name as "raisedBy", o.raised_by::int as "raisedById", o.medrep_id::int as "medrepId",
         case when o.sold_as like '%@%' then o.sold_as else o.sold_as || '@' || ${loginDomain()} end as "soldAs", o.covered,
+        (select sa.name from seat ss join area sa on sa.id = ss.area_id where ss.id = o.seat_id and not ss.lead) as "seatArea",
         ${SHOWN_CHANNEL} as channel, a.name as area,
         o.payment_terms as "paymentTerms", o.payment_days::int as "paymentDays",
         o.delivery_address as "deliveryAddress", o.receiver, o.receiver_phone as "receiverPhone", o.note,
@@ -1488,6 +1491,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
     ),
   ]);
   const {
+    seatArea,
     raisedById,
     medrepId,
     licenceExpired,
@@ -1548,6 +1552,8 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
         ? { statusLabel: "Completed" }
         : {}),
       invoiceFromLabel: invoiceFromLabel(order.invoiceFrom),
+      // The HQ it was placed from, before the MedRep's name, as on the order cards (PLAN 268).
+      hq: seatArea ? hqOf(seatArea, order.medrep) : null,
       customerMissing: missingOf(
         {
           kind: order.customerKind,

@@ -58,7 +58,7 @@ export async function careGroups(db: Database, me: Me): Promise<CareGroups> {
   const list = await rows<CareGroups["rows"][number]>(
     db,
     sql`select g.id::int as id, g.name, g.doctor_id::int as "doctorId", d.name as doctor, d.phone as "doctorPhone",
-        e.name as chc, t.name as telesales, g.patients, g.note,
+        e.name as chc, g.enrolled_by::int as "chcId", t.name as telesales, g.telesales_id::int as "telesalesId", g.patients, g.note,
         g.enrolled_at as "enrolledAt", g.first_contact_at as "firstContactAt", g.last_activity_at as "lastActivityAt",
         case when g.first_contact_at is null then null else round(extract(epoch from g.first_contact_at - g.enrolled_at) / 60)::int end as "contactMinutes",
         case when g.first_contact_at is null then round(extract(epoch from now() - g.enrolled_at) / 60)::int else null end as "waitingMinutes",
@@ -81,13 +81,15 @@ export async function careGroups(db: Database, me: Me): Promise<CareGroups> {
           ? "quiet14"
           : "active") as CareGroups["rows"][number]["state"],
   }));
-  // This month: how many first contacts came within the 15 minutes.
-  const [month] = await rows<{ contacted: number; inTime: number; enrolled: number; today: number }>(
+  // This month: how many first contacts came within the 15 minutes. These count the month's groups
+  // since closed too, which the list (open groups) doesn't show: how many is said beside them.
+  const [month] = await rows<{ contacted: number; inTime: number; enrolled: number; today: number; closed: number }>(
     db,
     sql`select count(*) filter (where g.first_contact_at is not null)::int as contacted,
         count(*) filter (where g.first_contact_at - g.enrolled_at <= ${`${FIRST_CONTACT_MINUTES} minutes`}::interval)::int as "inTime",
         count(*)::int as enrolled,
-        count(*) filter (where (g.enrolled_at at time zone 'Asia/Manila')::date = ${today}::date)::int as today
+        count(*) filter (where (g.enrolled_at at time zone 'Asia/Manila')::date = ${today}::date)::int as today,
+        count(*) filter (where g.closed_at is not null)::int as closed
       from care_group g where date_trunc('month', g.enrolled_at at time zone 'Asia/Manila') = date_trunc('month', ${today}::date) and ${where}`,
   );
   const count = (state: string) => withState.filter((row) => row.state === state).length;
@@ -102,6 +104,7 @@ export async function careGroups(db: Database, me: Me): Promise<CareGroups> {
       quiet30: count("quiet30"),
       enrolledToday: month?.today ?? 0,
       enrolledThisMonth: month?.enrolled ?? 0,
+      closedThisMonth: month?.closed ?? 0,
       contactedInTime: month?.inTime ?? 0,
       contactedThisMonth: month?.contacted ?? 0,
     },

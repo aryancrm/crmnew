@@ -5,12 +5,11 @@
 import type { Collections } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
 import { Phone } from "lucide-react";
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
 import { useMe } from "../auth";
-import { shortPeso } from "../ceo";
+import { exactPeso, shortPeso } from "../ceo";
 import { seatWords } from "../seat-words";
 import { CARD, count, dayLabel, PageHead, PageState, useOpenOnPress } from "../ui";
 import { EmptyState } from "../no-results";
@@ -30,8 +29,15 @@ export function CollectionsPage() {
   const words = seatWords(me);
   const unit = useTeamUnit();
   // The oldest 300 listed; every one on "Show all". The total and the boxes always count them all
-  // (Aryan, 28 Nov: "Yes, fix it", PLAN 267).
-  const [all, setAll] = useState(false);
+  // (Aryan, 28 Nov: "Yes, fix it", PLAN 267). "Show all" is kept in the address (?all=1, beside the
+  // team switch's unit), so coming back from a customer keeps the whole list.
+  const [params, setParams] = useSearchParams();
+  const all = params.get("all") === "1";
+  const showAll = () => {
+    const next = new URLSearchParams(params);
+    next.set("all", "1");
+    setParams(next, { replace: true });
+  };
   // A press anywhere on a customer's row opens the customer, not only the name (28 Nov, PLAN 271).
   const open = useOpenOnPress();
   const query = useQuery({
@@ -50,7 +56,15 @@ export function CollectionsPage() {
             {data.scope === "My customers" ? words.myCustomers : data.scope}
           </span>
         }
-        sub={`${shortPeso(data.total)} owed by ${count(data.customers)} customer${data.customers === 1 ? "" : "s"} · age counted from the oldest unpaid invoice`}
+        sub={
+          // Each figure shows its exact pesos on hover.
+          <>
+            <span title={exactPeso(data.total)}>{shortPeso(data.total)}</span>
+            {` owed by ${count(data.customers)} customer${data.customers === 1 ? "" : "s"} · `}
+            <span title={exactPeso(data.pastDue)}>{shortPeso(data.pastDue)}</span>
+            {" past due · age counted from the oldest unpaid invoice"}
+          </>
+        }
       />
       <div className="mb-4">
         <TeamSwitch />
@@ -70,7 +84,9 @@ export function CollectionsPage() {
               <div className="flex items-center gap-1.5 text-[13px] text-slate-500">
                 <span className={`size-2 rounded-full ${FLAG[one.key].bar}`} /> {one.label}
               </div>
-              <div className="mt-1 text-[28px] leading-tight font-medium tracking-tight text-slate-900 tabular-nums">{shortPeso(one.amount)}</div>
+              <div className="mt-1 text-[28px] leading-tight font-medium tracking-tight text-slate-900 tabular-nums" title={exactPeso(one.amount)}>
+                {shortPeso(one.amount)}
+              </div>
             </div>
           ))}
         </div>
@@ -116,7 +132,7 @@ export function CollectionsPage() {
                   </div>
                 </td>
                 <td className="px-3 py-2.5 text-right font-semibold text-slate-900 tabular-nums">
-                  {shortPeso(row.owed)}
+                  <span title={exactPeso(row.owed)}>{shortPeso(row.owed)}</span>
                   <div className="text-[11.5px] font-normal text-slate-400">
                     {row.invoices} invoice{row.invoices === 1 ? "" : "s"}
                   </div>
@@ -151,7 +167,7 @@ export function CollectionsPage() {
             <span>
               The {count(data.rows.length)} oldest of {count(data.customers)} are listed; the total and the boxes above count every one.
             </span>
-            <button type="button" onClick={() => setAll(true)} disabled={query.isFetching} className="font-semibold text-emerald-700 hover:underline disabled:opacity-50">
+            <button type="button" onClick={showAll} disabled={query.isFetching} className="font-semibold text-emerald-700 hover:underline disabled:opacity-50">
               {query.isFetching ? "Reading…" : `Show all ${count(data.customers)}`}
             </button>
           </div>

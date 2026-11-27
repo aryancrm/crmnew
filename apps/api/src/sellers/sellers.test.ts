@@ -151,4 +151,27 @@ describe("collections counts every customer who owes (28 Nov, PLAN 267)", () => 
     // The newest are in the total even when the list stops before them.
     expect(listed.buckets.find((one) => one.key === "ok")?.amount).toBeGreaterThanOrEqual(301 * 10000);
   });
+
+  it("says how much is past due: invoices past their due date, every customer's, listed or not", async () => {
+    const before = (await (await get("ryan", "/api/my/collections")).json()) as Collections;
+    // The 301 invoices above aren't due yet: they are owed, not past due.
+    expect(before.total - before.pastDue).toBeGreaterThanOrEqual(301 * 10000);
+    // A Zoho invoice of Ryan's territory 5 days past its due date (the HQ test above) is.
+    expect(before.pastDue).toBeGreaterThanOrEqual(500000);
+    // The newest customer owes on an invoice due yesterday: past the 300 listed, still past due.
+    await db.execute(
+      sql`with ryan as (select p.id, s.area_id from person p join seat_holder h on h.person_id = p.id and h.ends_on is null
+            join seat s on s.id = h.seat_id where p.email = 'ryan@2mg.test' limit 1),
+        made as (insert into customer (name, kind, area_id, added_by)
+          select 'Late Newest Patient', 'patient', ryan.area_id, ryan.id from ryan returning id)
+        insert into book_doc (kind, zoho_id, number, doc_date, due_date, status, customer_id, total, balance)
+        select 'invoice', 'z-late-newest', 'INV-LATE-NEWEST', current_date, current_date - 1, 'overdue', id, 7700, 7700 from made`,
+    );
+    const listed = (await (await get("ryan", "/api/my/collections")).json()) as Collections;
+    expect(listed.rows.some((one) => one.customer === "Late Newest Patient")).toBe(false);
+    expect(listed.pastDue).toBe(before.pastDue + 7700);
+    const every = (await (await get("ryan", "/api/my/collections?all=1")).json()) as Collections;
+    expect(every.rows.some((one) => one.customer === "Late Newest Patient")).toBe(true);
+    expect(every.pastDue).toBe(listed.pastDue);
+  });
 });

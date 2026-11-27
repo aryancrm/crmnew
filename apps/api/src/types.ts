@@ -1381,6 +1381,9 @@ export type OrderDetail = {
      *  whether it was sold covering a vacant area (the seat's sale, not the seller's own KPI). */
     soldAs: string | null;
     covered: boolean;
+    /** The HQ it was placed from (TAFT, ON SITE), shown before the MedRep's name: the order's
+     *  seat's territory; none for a lead's own seat (PLAN 268). */
+    hq: string | null;
     raisedBy: string;
     channel: string | null;
     area: string | null;
@@ -5956,6 +5959,8 @@ export type Collections = {
   today: string;
   /** Every owing customer's: the total, how many owe (the list may show only the oldest 300). */
   total: number;
+  /** Of the total, what is owed on invoices past their due date (every owing customer's too). */
+  pastDue: number;
   customers: number;
   buckets: { key: "ok" | "d60" | "d75" | "d90"; label: string; amount: number }[];
   rows: {
@@ -6097,6 +6102,8 @@ export type CareGroups = {
     quiet30: number;
     enrolledToday: number;
     enrolledThisMonth: number;
+    /** Of this month's enrolled, those since closed: counted above, not in the list. */
+    closedThisMonth: number;
     contactedInTime: number;
     contactedThisMonth: number;
   };
@@ -6107,7 +6114,10 @@ export type CareGroups = {
     doctor: string;
     doctorPhone: string | null;
     chc: string;
+    /** The CHC's and the telesales' person, for their HQ before their name. */
+    chcId: number;
     telesales: string | null;
+    telesalesId: number | null;
     patients: number;
     note: string | null;
     enrolledAt: string;

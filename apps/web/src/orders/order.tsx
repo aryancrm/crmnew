@@ -22,6 +22,7 @@ import { CustomerOrders, OrderJourney, PayRoadBox, payRoadOf } from "./order-hea
 import { OrderReturnsBox, RefundButton } from "./returns";
 import { SendToCustomer } from "./send-update";
 import { OrderVersions } from "./versions";
+import { withHq } from "../team/hq-name";
 import { Button, dayLabel, PageState, Pill, Problem, peso, timeLabel, useAction, useLook } from "../ui";
 import { DeliveredStep } from "./steps/delivered";
 import { DispatchStep } from "./steps/dispatch";
@@ -110,7 +111,7 @@ function stepsOf(data: OrderDetail) {
       key: "placed",
       number: 1,
       label: "Placed",
-      who: `${order.medrep}${order.raisedBy !== order.medrep ? ` (placed by ${order.raisedBy})` : ""}`,
+      who: `${withHq(order.hq, order.medrep)}${order.raisedBy !== order.medrep ? ` (placed by ${order.raisedBy})` : ""}`,
       when: order.submittedAt ?? order.createdAt,
       shape: shape("placed"),
       mine: mine.placed,
@@ -1014,7 +1015,12 @@ export function Order() {
                   )}
                 {/* The Division says it already, unless the channel is another. */}
                 {order.channel && order.channel !== order.division && fact("Channel", order.channel)}
-                {fact("MedRep", order.medrep)}
+                {/* The HQ it was placed from, then the MedRep ("TAFT · Marwin Dy"); the seat's login
+                    it was sold as on hover. */}
+                {fact(
+                  "MedRep",
+                  <span title={order.hq && order.soldAs ? `Sold as ${order.soldAs}` : undefined}>{withHq(order.hq, order.medrep)}</span>,
+                )}
                 {fact(
                   "Placed",
                   `${timeLabel(order.submittedAt ?? order.createdAt)}${order.raisedBy !== order.medrep ? ` by ${order.raisedBy}` : ""}`,
@@ -1085,7 +1091,11 @@ export function Order() {
               {detail("Invoicing from", order.invoiceFromLabel)}
               {detail("Expected", order.expectedOn ? dayLabel(order.expectedOn) : null)}
               {detail("Raised by", order.raisedBy)}
-              {detail("Sold as", order.soldAs ? `${order.soldAs}${order.covered ? " · covering a vacant area (the seat's sale)" : ""}` : null)}
+              {/* With the HQ before the MedRep, the seat's login (rx11@…) is off this line; a sale
+                  covering a vacant area still says so. */}
+              {order.hq
+                ? order.covered && detail("Sold as", "Covering a vacant area (the seat's sale)")
+                : detail("Sold as", order.soldAs ? `${order.soldAs}${order.covered ? " · covering a vacant area (the seat's sale)" : ""}` : null)}
               {detail("Source", order.source)}
               {detail("Customer remarks", order.note)}
               {order.stockReason && detail("Goes on though short", order.stockReason)}

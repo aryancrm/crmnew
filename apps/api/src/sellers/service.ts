@@ -177,7 +177,7 @@ export async function collections(db: Database, me: Me, asked: { all?: boolean }
   // seller is whoever holds the seat of the customer's area now. Each with the HQ it was sold from
   // (Aryan's phase 5, PLAN 266): the order's seat's territory; a Zoho invoice's, its customer's; a
   // lead's own seat is no HQ (a lead shows by name, as on the team's pages).
-  const found = await rows<Omit<Collections["rows"][number], "flag" | "hq"> & { area: string | null }>(
+  const found = await rows<Omit<Collections["rows"][number], "flag" | "hq"> & { area: string | null; pastDue: number }>(
     db,
     sql`with inv as (
         select i.customer_id, i.code, '/orders/' || o.id as href, o.id::int as order_id, i.issued_on, i.due_on, (i.total - i.paid)::bigint as owed,
@@ -211,6 +211,8 @@ export async function collections(db: Database, me: Me, asked: { all?: boolean }
         to_char(min(inv.issued_on), 'YYYY-MM-DD') as "oldestOn",
         (${today}::date - min(inv.issued_on))::int as age,
         coalesce(max(${today}::date - inv.due_on) filter (where inv.due_on < ${today}::date), 0)::int as "daysLate",
+        -- What is owed on the invoices whose due date has passed, for the header's past due.
+        coalesce(sum(inv.owed) filter (where inv.due_on < ${today}::date), 0)::float8 as "pastDue",
         (array_agg(inv.seller order by inv.issued_on, inv.code))[1] as seller,
         (array_agg(inv.area order by inv.issued_on, inv.code))[1] as area
       from inv join customer c on c.id = inv.customer_id
@@ -218,11 +220,13 @@ export async function collections(db: Database, me: Me, asked: { all?: boolean }
       order by min(inv.issued_on), sum(inv.owed) desc`,
   );
   const flag = (age: number): Collections["rows"][number]["flag"] => (age >= 90 ? "d90" : age >= 75 ? "d75" : age >= 60 ? "d60" : "ok");
-  const withFlags = found.map(({ area, ...row }) => ({ ...row, hq: area ? hqOf(area, row.seller) : null, flag: flag(row.age) }));
+  const withFlags = found.map(({ area, pastDue: _pastDue, ...row }) => ({ ...row, hq: area ? hqOf(area, row.seller) : null, flag: flag(row.age) }));
   const sum = (key: Collections["rows"][number]["flag"]) => withFlags.filter((row) => row.flag === key).reduce((total, row) => total + row.owed, 0);
   return {
     today,
     total: withFlags.reduce((total, row) => total + row.owed, 0),
+    // Past due, from the same rows as the total: every owing customer's, not only those listed.
+    pastDue: found.reduce((total, row) => total + row.pastDue, 0),
     customers: withFlags.length,
     buckets: [
       { key: "ok", label: "Under 60 days", amount: sum("ok") },

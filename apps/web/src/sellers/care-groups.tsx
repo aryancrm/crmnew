@@ -10,8 +10,9 @@ import { Check, Clock, Plus, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
-import { Button, CARD, Dialog, PageHead, PageState, Problem, useAction } from "../ui";
+import { Button, CARD, Dialog, PageHead, PageState, Problem, useAction, useOpenOnPress } from "../ui";
 import { EmptyState } from "../no-results";
+import { useHqNames } from "../team/hq-name";
 
 type Row = CareGroups["rows"][number];
 
@@ -90,6 +91,8 @@ function ActivityButton({ id }: { id: number }) {
 
 /** The groups waiting for first contact, for MD Telesales' Home and the page. */
 export function WaitingGroups({ data, limit = 8 }: { data: CareGroups; limit?: number }) {
+  // Each person after their HQ ("TAFT · Marwin Dy").
+  const { named } = useHqNames();
   const waiting = data.rows.filter((row) => row.state === "waiting" || row.state === "late").slice(0, limit);
   return (
     <section className={`${CARD} min-w-0`}>
@@ -108,7 +111,7 @@ export function WaitingGroups({ data, limit = 8 }: { data: CareGroups; limit?: n
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[13px] font-semibold text-slate-900">{row.doctor}</span>
                 <span className="block text-[11.5px] text-slate-500">
-                  Enrolled by {row.chc} · {row.patients} patient{row.patients === 1 ? "" : "s"}
+                  Enrolled by {named(row.chcId, row.chc)} · {row.patients} patient{row.patients === 1 ? "" : "s"}
                 </span>
               </span>
               <Clock15 since={row.enrolledAt} limit={data.firstContactMinutes} />
@@ -121,8 +124,9 @@ export function WaitingGroups({ data, limit = 8 }: { data: CareGroups; limit?: n
   );
 }
 
-/** The heads' one-glance card: waiting now, the 15 minutes kept this month, quiet groups. */
-export function GroupsGlance({ data }: { data: CareGroups }) {
+/** The heads' one-glance card: waiting now, the 15 minutes kept this month, quiet groups. On the
+ *  Care groups page itself (`onPage`) it has no Open link, which would only open the same page. */
+export function GroupsGlance({ data, onPage = false }: { data: CareGroups; onPage?: boolean }) {
   const c = data.counts;
   const kept = c.contactedThisMonth ? Math.round((c.contactedInTime / c.contactedThisMonth) * 100) : null;
   return (
@@ -131,16 +135,24 @@ export function GroupsGlance({ data }: { data: CareGroups }) {
         <h2 className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-900">
           <Users className="size-4 text-slate-500" /> Patient Care Groups
         </h2>
-        <Link to="/care-groups" className="text-[12px] font-semibold text-emerald-700 hover:underline">
-          Open
-        </Link>
+        {!onPage && (
+          <Link to="/care-groups" className="text-[12px] font-semibold text-emerald-700 hover:underline">
+            Open
+          </Link>
+        )}
       </div>
       <div className="mt-2 grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
         {(
           [
             ["Waiting now", c.waiting + c.late, c.late ? "text-rose-700" : "text-slate-900"],
             ["15 min kept", kept === null ? "—" : `${kept}%`, kept === null ? "text-slate-400" : kept >= 90 ? "text-emerald-700" : "text-amber-700"],
-            ["Enrolled this month", c.enrolledThisMonth, "text-slate-900"],
+            // The month's counts include groups since closed, which the list (open groups) doesn't
+            // show: said here, so the glance and the list agree.
+            [
+              c.closedThisMonth ? `Enrolled this month, ${c.closedThisMonth} since closed` : "Enrolled this month",
+              c.enrolledThisMonth,
+              "text-slate-900",
+            ],
             ["Quiet 14+ days", c.quiet14 + c.quiet30, c.quiet14 + c.quiet30 ? "text-amber-700" : "text-slate-900"],
           ] as const
         ).map(([label, value, tone]) => (
@@ -207,6 +219,9 @@ export function EnrolDialog({ onClose, doctorId }: { onClose: () => void; doctor
 export function CareGroupsPage() {
   const query = useGroups();
   const [enrolling, setEnrolling] = useState(false);
+  // Each person after their HQ ("TAFT · Marwin Dy"); a group's row opens its doctor, as its name does.
+  const { named } = useHqNames();
+  const open = useOpenOnPress();
   const data = query.data;
   if (!data) return <PageState query={query} what="the care groups" />;
   const rest = data.rows.filter((row) => row.state !== "waiting" && row.state !== "late");
@@ -223,7 +238,7 @@ export function CareGroupsPage() {
           ) : undefined
         }
       />
-      {!data.can.enrol && !data.can.contact && <GroupsGlance data={data} />}
+      {!data.can.enrol && !data.can.contact && <GroupsGlance data={data} onPage />}
       <WaitingGroups data={data} limit={50} />
       <section className={`${CARD} overflow-x-auto`}>
         <table className="w-full text-[13px]">
@@ -245,7 +260,7 @@ export function CareGroupsPage() {
               </tr>
             )}
             {rest.map((row) => (
-              <tr key={row.id} className="hover:bg-slate-50/60">
+              <tr key={row.id} onClick={open(`/customers/${row.doctorId}`)} className="cursor-pointer hover:bg-slate-50/60">
                 <td className="px-4 py-2.5">
                   <Link to={`/customers/${row.doctorId}`} className="font-semibold text-slate-900 hover:underline">
                     {row.doctor}
@@ -253,8 +268,8 @@ export function CareGroupsPage() {
                   <div className="text-[11.5px] text-slate-500">{row.name}</div>
                 </td>
                 <td className="px-3 py-2.5 text-slate-600">
-                  {row.chc}
-                  <div className="text-[11.5px] text-slate-400">{row.telesales ?? "—"}</div>
+                  {named(row.chcId, row.chc)}
+                  <div className="text-[11.5px] text-slate-400">{row.telesales ? named(row.telesalesId, row.telesales) : "—"}</div>
                 </td>
                 <td className="px-3 py-2.5 text-right tabular-nums">{row.patients}</td>
                 <td className={`px-3 py-2.5 tabular-nums ${row.contactMinutes !== null && row.contactMinutes > data.firstContactMinutes ? "text-rose-700" : "text-slate-600"}`}>
