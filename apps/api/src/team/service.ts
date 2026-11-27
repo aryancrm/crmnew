@@ -364,11 +364,21 @@ export async function teamBoard(
     ),
     rows<TeamBoard["topMedicines"][number]>(
       db,
-      sql`select m.name || coalesce(' ' || m.strength, '') as name, sum(i.qty)::int as qty,
-            sum(i.qty * i.unit_price)::float8 as value
-          from order_item i join sales_order o on o.id = i.order_id join medicine m on m.id = i.medicine_id
-          where o.seat_id in (${list}) and o.status not in ('draft', 'cancelled') and ${inRange(placedDay)}
-          group by 1 order by value desc, qty desc limit 8`,
+      // The medicines sold: what was invoiced in the days picked, by value without VAT, this CRM's
+      // invoiced lines and Zoho's, as Sales vs target counts them (one number everywhere; it counted
+      // the orders placed, with VAT, and left Zoho's out).
+      sql`select name, sum(qty)::float8 as qty, sum(value)::float8 as value from (
+            select m.name || coalesce(' ' || m.strength, '') as name, oi.qty::numeric as qty,
+              round(oi.qty::numeric * oi.unit_price / case when coalesce(oi.vat_then, m.vat) = 'vat12' then 1.12 else 1 end) as value
+            from invoice i join sales_order o on o.id = i.order_id join order_item oi on oi.order_id = o.id join medicine m on m.id = oi.medicine_id
+            where i.status <> 'cancelled' and ${inRange(sql`i.issued_on`)} and o.seat_id in (${list})
+            union all
+            select coalesce(m.name || coalesce(' ' || m.strength, ''), nullif(trim(l.item_name), ''), 'Not named'), coalesce(l.qty, 0), round(coalesce(l.amount, 0) * d.fx_rate)
+            from book_doc d join book_line l on l.doc_id = d.id left join medicine m on m.id = l.medicine_id
+              join zoho_seller zs on zs.name = coalesce(d.fields->>'Sales Person', d.fields->>'salesperson_name')
+            where d.kind = 'invoice' and d.zoho_id is not null and d.status not in ('draft', 'void') and d.voided_at is null
+              and ${inRange(sql`d.doc_date`)} and coalesce(l.qty, 1) > 0 and zs.seat_id in (${list})
+          ) x group by name order by value desc, qty desc limit 8`,
     ),
     rows<TeamBoard["byKind"][number]>(
       db,

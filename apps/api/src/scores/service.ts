@@ -791,7 +791,7 @@ export async function scoreNeeds(db: Database, seatIds: number[], today: string)
     if (!card) continue;
     // Give the month a week before calling a low score.
     if (Number(today.slice(8)) >= 8 && card.max > 0 && card.percent < 60)
-      needs.push({ ...base, kind: "score", who: one.name, seatId: one.seatId, why: `Score ${card.total} of ${card.max} this month, below 60` });
+      needs.push({ ...base, kind: "score", who: one.name, seatId: one.seatId, why: `Score ${card.total} of ${card.max} (${card.percent}%), below 60%` });
     const gate = card.kpis.find((kpi) => kpi.weight === 0 && kpi.band && kpi.band !== "Pass");
     if (gate && Number(today.slice(8)) >= 15)
       needs.push({ ...base, kind: "score", who: one.name, seatId: one.seatId, why: `${gate.label.split(" ·")[0]} gate failing: ${gate.note}` });

@@ -8,10 +8,11 @@ import type { CallList, SalesCallOutcome } from "@2mg/api/types";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PhoneCall, X } from "lucide-react";
 import { useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
-import { Button, CARD, PageHead, PageState, Problem, useAction } from "../ui";
+import { useHqNames } from "../team/hq-name";
+import { Button, CARD, PageHead, PageState, Problem, useAction, useOpenOnPress } from "../ui";
 import { EmptyState } from "../no-results";
 
 const OUTCOMES: { key: SalesCallOutcome; label: string; tone: string }[] = [
@@ -132,6 +133,10 @@ export function Calls() {
   const to = params.get("to") ?? today;
   const person = params.get("person");
   const unit = useTeamUnit();
+  // Each person after their HQ ("TAFT · Marwin Dy"; PLAN 269); a call opens its customer's page,
+  // pressed anywhere on it.
+  const { named } = useHqNames();
+  const open = useOpenOnPress();
   const query = useQuery({
     queryKey: ["calls", from, to, person, unit],
     queryFn: () => api<CallList>(`/api/calls?${new URLSearchParams({ from, to, ...(person ? { person } : {}), ...(unit ? { unit } : {}) })}`),
@@ -141,6 +146,7 @@ export function Calls() {
   const people = [...new Map((data?.perDay ?? []).map((p) => [p.personId, p.person])).entries()];
   const days = [...new Set((data?.perDay ?? []).map((p) => p.day))].sort();
   const many = people.length > 1 || (people.length === 1 && people[0]?.[0] !== me.data?.id);
+  const picked = people.find(([id]) => String(id) === person);
   const set = (next: Record<string, string | null>) => {
     const out = new URLSearchParams(params);
     for (const [k, v] of Object.entries(next)) v ? out.set(k, v) : out.delete(k);
@@ -187,7 +193,7 @@ export function Calls() {
                   <tr key={id} className="border-t border-slate-100">
                     <td className="px-4 py-2">
                       <button type="button" className="font-medium text-slate-900 hover:text-brand" onClick={() => set({ person: person === String(id) ? null : String(id) })}>
-                        {name}
+                        {named(id, name)}
                       </button>
                     </td>
                     {days.map((d) => (
@@ -207,7 +213,7 @@ export function Calls() {
         <section className={`${CARD} overflow-hidden`}>
           {person && (
             <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2 text-sm">
-              <span>Showing {people.find(([id]) => String(id) === person)?.[1] ?? "one person"}'s calls</span>
+              <span>Showing {picked ? named(picked[0], picked[1]) : "one person"}'s calls</span>
               <Button small onClick={() => set({ person: null })}>
                 Everyone
               </Button>
@@ -215,11 +221,22 @@ export function Calls() {
           )}
           <ul className="divide-y divide-slate-100">
             {data.rows.map((call) => (
-              <li key={call.id} className="flex flex-wrap items-start gap-x-4 gap-y-1 px-4 py-2.5 text-sm">
+              <li
+                key={call.id}
+                onClick={call.customerId ? open(`/customers/${call.customerId}`) : undefined}
+                className={`flex flex-wrap items-start gap-x-4 gap-y-1 px-4 py-2.5 text-sm ${call.customerId ? "cursor-pointer hover:bg-slate-50" : ""}`}
+              >
                 <span className="w-24 shrink-0 text-slate-500 tabular-nums">{call.at.slice(from === to ? 11 : 5)}</span>
                 <span className="min-w-0 flex-1">
-                  <span className="font-medium text-slate-900">{call.customer}</span>
-                  {many && <span className="text-slate-500"> · {call.person}</span>}
+                  {call.customerId ? (
+                    <Link to={`/customers/${call.customerId}`} className="font-medium text-slate-900 hover:underline">
+                      {call.customer}
+                    </Link>
+                  ) : (
+                    // A name typed in, not in the customer list: no page behind it.
+                    <span className="font-medium text-slate-900">{call.customer}</span>
+                  )}
+                  {many && call.person && <span className="text-slate-500"> · {named(call.personId, call.person)}</span>}
                   {call.note && <span className="block text-slate-600">{call.note}</span>}
                 </span>
                 <span className={`rounded-full border px-2 py-0.5 text-[12px] ${OUTCOMES.find((o) => o.key === call.outcome)?.tone ?? "border-slate-200"}`}>{outcomeLabel(call.outcome)}</span>

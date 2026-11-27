@@ -2,7 +2,9 @@
 // (sold against target), a sparkline, bars by day, a donut (orders by where they stand) and
 // labelled horizontal bars.
 
+import { Link } from "react-router-dom";
 import { shortPeso } from "../ceo";
+import { useOpenOnPress } from "../ui";
 
 export type Slice = { label: string; value: number; color: string };
 
@@ -215,7 +217,8 @@ export function Donut({
   );
 }
 
-/** Labelled bars, longest first: a value against an optional mark (a target). */
+/** Labelled bars, longest first: a value against an optional mark (a target). A row with a page
+ *  behind it (`to`) opens it when pressed anywhere on it. */
 export function Bars({
   rows,
   format = shortPeso,
@@ -228,20 +231,33 @@ export function Bars({
     value: number;
     mark?: number | null;
     tone?: string;
+    /** The page the row opens (a person's page), when it has one. */
+    to?: string;
   }[];
   format?: (value: number) => string;
   color?: string;
 }) {
+  const open = useOpenOnPress();
   const top = Math.max(1, ...rows.map((row) => Math.max(row.value, row.mark ?? 0)));
   return (
     <ul className="grid gap-2.5">
       {rows.map((row) => (
         <li
           key={row.key}
-          className="grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)_auto] items-center gap-3 text-[13px]"
+          onClick={row.to ? open(row.to) : undefined}
+          className={`grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)_auto] items-center gap-3 text-[13px] ${
+            row.to ? "-mx-2 -my-1 cursor-pointer rounded-lg px-2 py-1 hover:bg-slate-50" : ""
+          }`}
         >
           <span className="min-w-0">
-            <span className="block truncate font-medium text-slate-800">{row.label}</span>
+            {row.to ? (
+              // The name stays a link, for the keyboard.
+              <Link to={row.to} className="block truncate font-medium text-slate-800 hover:underline">
+                {row.label}
+              </Link>
+            ) : (
+              <span className="block truncate font-medium text-slate-800">{row.label}</span>
+            )}
             {row.sub && (
               <span className="block truncate text-[11px] text-slate-400">{row.sub}</span>
             )}

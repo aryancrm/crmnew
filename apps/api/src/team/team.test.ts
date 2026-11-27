@@ -4,6 +4,7 @@ import { createApp } from "../app";
 import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
 import { seedFixture } from "../inventory/fixture";
+import { todayManila } from "../inventory/rules";
 import { divisionOfChannel } from "../orders/divisions";
 import { seedDemo } from "../seed";
 import type {
@@ -275,5 +276,56 @@ describe("the map's territories", () => {
     const rx = (await tree()).units.find((unit) => unit.name === "Prescription Business");
     expect((await get("vanessa", `/api/team/territories?unit=${rx?.id}`)).status).toBe(403);
     expect((await get("ryan", "/api/team/territories")).status).toBe(403);
+  });
+});
+
+describe("Whole business's medicines sold", () => {
+  it("counts what was invoiced in the days picked, without VAT, this CRM's lines and Zoho's", async () => {
+    const today = todayManila();
+    const before = await board("daniel");
+    const pasay = before.seats.find((seat) => seat.area?.name === "HOS | Pasay");
+    // One of the orders placed from Pasay above: its medicine, and its lines' value without VAT.
+    const [placed] = await rows<{ orderId: number; customerId: number; total: number; name: string; qty: number; net: number }>(
+      db,
+      sql`select o.id::int as "orderId", o.customer_id::int as "customerId", o.total::int as total,
+          min(m.name || coalesce(' ' || m.strength, '')) as name, sum(oi.qty)::float8 as qty,
+          sum(round(oi.qty::numeric * oi.unit_price / case when coalesce(oi.vat_then, m.vat) = 'vat12' then 1.12 else 1 end))::float8 as net
+        from sales_order o join order_item oi on oi.order_id = o.id join medicine m on m.id = oi.medicine_id
+        where o.seat_id = ${pasay?.seatId} and o.status = 'pending_approval'
+        group by o.id order by o.id limit 1`,
+    );
+    // Placed is not sold: nothing is invoiced yet.
+    expect(before.topMedicines.find((one) => one.name === placed?.name)).toBeUndefined();
+
+    const [invoice] = await rows<{ id: number }>(
+      db,
+      sql`insert into invoice (code, order_id, customer_id, invoice_from, terms, issued_on, due_on, total, by_person)
+        values ('INV-BOARD-1', ${placed?.orderId}, ${placed?.customerId}, '2mg', 'days', ${today}::date, ${today}::date, ${placed?.total},
+          (select id from person order by id limit 1)) returning id::int as id`,
+    );
+    // Zoho's invoice under the seat's Zoho name (its lines are without VAT); a void one is not sold.
+    await db.execute(sql`insert into zoho_seller (name, seat_id) values ('HOS | BOARD TEST', ${pasay?.seatId})`);
+    const zoho = async (zohoId: string, status: string, item: string) => {
+      const [doc] = await rows<{ id: number }>(
+        db,
+        sql`insert into book_doc (kind, zoho_id, number, doc_date, due_date, status, customer_id, total, balance, fields)
+          values ('invoice', ${zohoId}, ${zohoId}, ${today}::date, ${today}::date, ${status}, ${placed?.customerId}, 11200000, 11200000,
+            '{"Sales Person": "HOS | BOARD TEST"}'::jsonb) returning id::int as id`,
+      );
+      await db.execute(sql`insert into book_line (doc_id, n, item_name, qty, amount) values (${doc?.id}, 1, ${item}, 4, 10000000)`);
+    };
+    await zoho("z-board-1", "sent", "Board test medicine 5 mg");
+    await zoho("z-board-2", "void", "Board void medicine 5 mg");
+
+    const after = await board("daniel");
+    // The CRM's line by its value without VAT: the same as the invoice's sold.
+    const [sold] = await rows<{ net: number }>(db, sql`select net::float8 as net from sale_invoice where source = 'crm' and id = ${invoice?.id}`);
+    expect(after.topMedicines.find((one) => one.name === placed?.name)).toMatchObject({ qty: placed?.qty, value: placed?.net });
+    expect(placed?.net).toBe(sold?.net);
+    expect(after.topMedicines.find((one) => one.name === "Board test medicine 5 mg")).toMatchObject({ qty: 4, value: 10000000 });
+    expect(after.topMedicines.some((one) => one.name === "Board void medicine 5 mg")).toBe(false);
+    // Only the days picked.
+    const past = await board("daniel", "?from=2020-01-01&to=2020-01-31");
+    expect(past.topMedicines).toEqual([]);
   });
 });

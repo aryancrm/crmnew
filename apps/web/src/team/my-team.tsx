@@ -337,11 +337,14 @@ function Needs({
   needs,
   seatHref,
   hqOf,
+  personOf,
 }: {
   needs: TeamNeed[];
   seatHref: (seatId: number) => string;
   /** A seat's HQ, to put before whose it is (PLAN 265). */
   hqOf: (seatId: number | null) => string | null;
+  /** Who sits in a seat, so a score opens that person's own scorecard. */
+  personOf: (seatId: number | null) => number | null;
 }) {
   if (needs.length === 0)
     return (
@@ -349,12 +352,17 @@ function Needs({
         Every order is moving.
       </EmptyState>
     );
+  // A score opens the person's own scorecard, not the Scorecards list.
+  const scoreHref = (seatId: number | null) => {
+    const person = personOf(seatId);
+    return person ? `/my/score?person=${person}` : "/team-scores";
+  };
   return (
     <ul className="-mx-2 max-h-[26rem] overflow-y-auto">
       {needs.map((need) => (
         <li key={`${need.kind}-${need.code ?? need.seatId}-${need.why}`}>
           <Link
-            to={need.orderId ? `/orders/${need.orderId}` : need.kind === "score" ? "/team-scores" : seatHref(need.seatId ?? 0)}
+            to={need.orderId ? `/orders/${need.orderId}` : need.kind === "score" ? scoreHref(need.seatId) : seatHref(need.seatId ?? 0)}
             className="flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-slate-50"
           >
             <span
@@ -496,7 +504,8 @@ export function MyTeamPage() {
   const [params] = useSearchParams();
   const unit = params.get("unit");
   const query = useBoard(unit, params.get("from"), params.get("to"));
-  const [everyone, setEveryone] = useState(false);
+  // The people cards: the box's own people or everyone under it (unset: decided by the box, below).
+  const [everyone, setEveryone] = useState<boolean | null>(null);
   const [asking, setAsking] = useState<"seat" | "region" | "area" | null>(null);
   // The chart: boxes of teams (a big view), or every person (a team's own view).
   const [chartAll, setChartAll] = useState<boolean | null>(null);
@@ -541,7 +550,10 @@ export function MyTeamPage() {
     `/my-team?${new URLSearchParams([["unit", String(unitId)], ...dates])}`;
   const deep = teams.length > 0 && data.rootIds.length === 1;
   const own = deep ? data.seats.filter((seat) => data.rootIds.includes(seat.unitId)) : data.seats;
-  const people = everyone || !deep ? data.seats : own;
+  // A box that holds only its lead (Javed's own people were himself alone, "Its own people (1)")
+  // shows everyone under it from the start.
+  const showEveryone = everyone ?? own.every((seat) => seat.lead);
+  const people = showEveryone || !deep ? data.seats : own;
   const showAll = chartAll ?? !(deep || data.seats.length > 24);
   const whole = me?.role === "ceo" || me?.role === "admin";
   const places = placesOrders(me);
@@ -575,6 +587,8 @@ export function MyTeamPage() {
         value: seat.sold,
         mark: seat.target,
         tone: TONE[toneOf(seat.sold, seat.target, pace)].bar,
+        // Pressed anywhere, a row opens the person's page.
+        to: seatHref(seat.seatId),
       };
     });
   const rangeWords =
@@ -785,7 +799,7 @@ export function MyTeamPage() {
           <Tile
             icon={<UserPlus className="size-5" />}
             tint="bg-violet-50 text-violet-700"
-            label="New customers"
+            label="Customers added"
             value={count(totals.newCustomers)}
             note="Added in their areas"
           />
@@ -918,6 +932,7 @@ export function MyTeamPage() {
                 const seat = data.seats.find((one) => one.seatId === seatId);
                 return seat ? hqOfSeat(seat) : null;
               }}
+              personOf={(seatId) => data.seats.find((one) => one.seatId === seatId)?.person?.id ?? null}
             />
           </Panel>
         </div>
@@ -940,7 +955,7 @@ export function MyTeamPage() {
       <section aria-label="People" className="space-y-2.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-slate-900">
-            {deep && !everyone ? "Its own people" : "Everyone"}
+            {deep && !showEveryone ? "Its own people" : "Everyone"}
             <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">
               {people.length}
             </span>
@@ -948,10 +963,10 @@ export function MyTeamPage() {
           {deep && (
             <button
               type="button"
-              onClick={() => setEveryone((now) => !now)}
+              onClick={() => setEveryone(!showEveryone)}
               className="text-xs font-semibold text-emerald-700 hover:underline"
             >
-              {everyone ? "Only its own people" : `Show everyone under it (${data.seats.length})`}
+              {showEveryone ? "Only its own people" : `Show everyone under it (${data.seats.length})`}
             </button>
           )}
         </div>
@@ -964,7 +979,7 @@ export function MyTeamPage() {
 
       {selling && (
         <div className="grid gap-5 lg:grid-cols-3">
-          <Panel title="Medicines sold" note="Placed, by value">
+          <Panel title="Medicines sold" note="Sold, by value without VAT">
             {data.topMedicines.length ? (
               <Bars
                 rows={data.topMedicines.map((one) => ({

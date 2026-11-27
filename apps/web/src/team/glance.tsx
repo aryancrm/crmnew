@@ -188,7 +188,7 @@ export function OrdersNowCard({
 export function MedicinesCard({ board }: { board: TeamBoard }) {
   const { shown, seeAll } = useSeeAll(board.topMedicines, 6);
   return (
-    <GlanceCard title="Medicines sold" note="Placed, by value" to="/medicines" seeAll={seeAll}>
+    <GlanceCard title="Medicines sold" note="Sold, by value without VAT" to="/medicines" seeAll={seeAll}>
       {board.topMedicines.length ? (
         <Bars
           rows={shown.map((one) => ({

@@ -5,6 +5,7 @@
 import type { TeamBoard, TeamSeatCard } from "@2mg/api/types";
 import { Link } from "react-router-dom";
 import { shortPeso } from "../ceo";
+import { hqOfSeat } from "./hq-name";
 
 const CSS = `
 .tch{overflow-x:auto;padding-bottom:4px}
@@ -24,6 +25,10 @@ const CSS = `
 type Unit = TeamBoard["units"][number];
 
 function SeatBox({ seat, pace, to }: { seat: TeamSeatCard; pace: number; to: string }) {
+  // A seller's box is their HQ, the person under it (PLAN 265), never the territory's Zoho-era
+  // name ("RX | TAFT"); a lead's box is the person and their title.
+  const hq = hqOfSeat(seat);
+  const who = seat.person?.name ?? (seat.acting ? `Vacant · ${seat.acting.name} covers` : "Vacant");
   const share = seat.target ? seat.sold / seat.target : null;
   const tone =
     share === null
@@ -44,14 +49,14 @@ function SeatBox({ seat, pace, to }: { seat: TeamSeatCard; pace: number; to: str
         <span
           className={`truncate text-[13px] font-semibold ${seat.person ? "text-slate-900" : "text-amber-800"}`}
         >
-          {seat.person?.name ?? (seat.acting ? `Vacant · ${seat.acting.name} covers` : "Vacant")}
+          {hq ?? who}
         </span>
         {seat.login && (
           <span className="shrink-0 font-mono text-[10px] text-slate-400">{seat.login}</span>
         )}
       </span>
       <span className="truncate text-[11px] text-slate-500">
-        {[seat.title, seat.area?.name].filter(Boolean).join(" · ")}
+        {[hq ? who : null, seat.title].filter(Boolean).join(" · ")}
       </span>
       <span className="mt-0.5 h-1.5 rounded-full bg-slate-100">
         <span

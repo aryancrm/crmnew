@@ -10,6 +10,7 @@ import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { Ring } from "../team/charts";
+import { hqOfSeat, withHq } from "../team/hq-name";
 import { Button, CARD, Dialog, Field, PageHead, PageState, Problem, useAction } from "../ui";
 
 export const shiftMonth = (month: string, by: number) => {
@@ -125,12 +126,16 @@ export function MyScorePage() {
     copy.set("month", next);
     setParams(copy, { replace: true });
   };
+  // A seller's HQ first ("TAFT · Marwin Dy"), never the territory's Zoho-era name ("RX | TAFT");
+  // a lead (a lead's own card) by name (PLAN 265).
+  const lead = card?.recipe === "lead" || card?.recipe === "team";
+  const hq = hqOfSeat({ lead, area: data.area ? { name: data.area } : null, person: { name: data.name } });
 
   return (
     <div className="mx-auto max-w-4xl">
       <PageHead
-        title={data.mine ? "My score" : data.name}
-        sub={[data.seat, data.area, card ? `${card.label} · ${card.source}` : data.field ? "Field work" : null].filter(Boolean).join(" · ")}
+        title={data.mine ? "My score" : withHq(hq, data.name)}
+        sub={[data.mine ? hq : null, data.seat, card ? `${card.label} · ${card.source}` : data.field ? "Field work" : null].filter(Boolean).join(" · ")}
         actions={<MonthPicker month={data.month} today={data.today} onChange={pick} />}
       />
       {!card && !data.field ? (
