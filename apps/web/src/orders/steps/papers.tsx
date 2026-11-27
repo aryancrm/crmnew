@@ -41,6 +41,14 @@ export function PaperChips({ data, kinds }: { data: OrderDetail; kinds: PaperKin
                 {row.label}
               </a>
             ));
+          // On the customer's own file (an ID, a business's papers): it counts here too.
+          if (row.onCustomer)
+            return (
+              <span key={row.kind} className="inline-flex items-center gap-1.5 font-semibold text-slate-800">
+                <span className="size-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
+                {row.label} <span className="font-normal text-slate-500">(on their file)</span>
+              </span>
+            );
           return mayAdd(row.kind) ? (
             <label
               key={row.kind}
@@ -184,7 +192,10 @@ export function Papers({ data, kinds }: { data: OrderDetail; kinds: PaperKind[] 
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <div className="text-sm font-semibold">{row.label}</div>
-                {row.why && (
+                {row.onCustomer && (
+                  <div className="text-xs text-emerald-700">On their file: it counts for this order</div>
+                )}
+                {row.why && !row.onCustomer && (
                   <div
                     className={`text-xs ${row.needed && !row.onFile ? "text-amber-700" : "text-ink-2"}`}
                   >

@@ -14,13 +14,17 @@ export async function customerFiles(db: Database, me: Me, id: number): Promise<C
   const files = await rows<CustomerFiles["files"][number]>(
     db,
     sql`select * from (
-        select 'customer'::text as source, f.kind, f.name, f.mime, f.at::text as at, p.name as by, null::text as record, null::text as link,
-          '/api/customer-papers/' || f.id as url
-        from customer_file f join person p on p.id = f.by_person where f.customer_id = ${id} and f.active
+        select 'customer'::text as source, f.kind, f.name, f.mime, f.at::text as at, p.name as by, o.code as record,
+          '/orders/' || o.id as link, '/api/customer-papers/' || f.id as url
+        from customer_file f join person p on p.id = f.by_person
+        left join order_file x on x.id = f.order_file_id left join sales_order o on o.id = x.order_id
+        where f.customer_id = ${id} and f.active
         union all
+        -- An order's paper kept on the customer too shows once, as theirs, with its order.
         select 'order', f.kind, f.name, f.mime, f.at::text, p.name, o.code, '/orders/' || o.id, '/api/papers/' || f.id
         from order_file f join sales_order o on o.id = f.order_id join person p on p.id = f.by_person
         where o.customer_id = ${id} and f.active
+          and not exists (select 1 from customer_file c where c.order_file_id = f.id and c.active)
         union all
         select 'case', f.kind, f.name, f.mime, f.at::text, p.name, coalesce(l.code, 'Case ' || l.id), '/leads/' || l.id, '/api/lead-files/' || f.id
         from lead_file f join lead l on l.id = f.lead_id join person p on p.id = f.by_person

@@ -642,7 +642,14 @@ export type CustomerInput = {
 
 /** A business customer's paper (the hub asked a hospital for all three). */
 /** A business's three papers, a patient's prescription and valid ID, and any other file. */
-export type CustomerPaperKind = "bir_2303" | "lto_permit" | "business_permit" | "prescription" | "valid_id" | "other";
+export type CustomerPaperKind =
+  | "bir_2303"
+  | "lto_permit"
+  | "business_permit"
+  | "prescription"
+  | "valid_id"
+  | "senior_id"
+  | "other";
 export type CustomerPaper = {
   id: number;
   kind: CustomerPaperKind;
@@ -1282,6 +1289,9 @@ export type InvoiceFrom = CompanyCode;
 export type PaperKind =
   | "po"
   | "hospital_doc"
+  | "bir_2303"
+  | "lto_permit"
+  | "business_permit"
   | "payment_proof"
   | "prescription"
   | "valid_id"
@@ -1540,6 +1550,8 @@ export type OrderDetail = {
     needed: boolean;
     why: string | null;
     onFile: boolean;
+    /** Not on this order but on the customer's own file (an ID, a business's papers): it counts. */
+    onCustomer: boolean;
   }[];
   /** Its invoice once Finance made it, the money received against it and any given back. */
   money: { invoice: InvoiceRow | null; payments: PaymentRow[]; refunds: RefundRow[] };

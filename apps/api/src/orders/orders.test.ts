@@ -975,6 +975,71 @@ describe("papers, the billing company, the doctor and order numbers", () => {
     expect((await get("sarla", `/api/papers/${paperId}`)).status).toBe(404);
   });
 
+  it("a business's papers on an order go on its own file too, and count on the next order", async () => {
+    const made = await place("ryan", { customerId: hospital, items: [line()] });
+    const before = await read<CustomerDetail>("ryan", `/api/customers/${hospital}`);
+    expect(before.papers.some((paper) => paper.kind === "lto_permit")).toBe(false);
+    const added = await upload("ryan", made.body.id, "lto_permit", png());
+    expect(added.status).toBe(200);
+    const paperId = ((await added.json()) as { id: number }).id;
+    // The PO stays with the order.
+    expect((await upload("ryan", made.body.id, "po", png())).status).toBe(200);
+
+    const after = await read<CustomerDetail>("ryan", `/api/customers/${hospital}`);
+    expect(after.papers.filter((paper) => paper.kind === "lto_permit")).toMatchObject([
+      { kindLabel: "LTO permit", name: "slip.png", by: "Ryan" },
+    ]);
+    expect(after.papers.some((paper) => paper.kind === ("po" as string))).toBe(false);
+    expect(after.missing).not.toContain("LTO permit");
+    // Its Files list it once, as theirs, with the order it came on.
+    const files = await read<{ files: { source: string; kind: string; record: string | null }[] }>(
+      "ryan",
+      `/api/customers/${hospital}/files`,
+    );
+    const lto = files.files.filter((file) => file.kind === "lto_permit");
+    expect(lto).toMatchObject([{ source: "customer", record: (await order("ryan", made.body.id)).order.code }]);
+    expect(files.files.some((file) => file.kind === "po" && file.source === "order")).toBe(true);
+    // The customer's file opens with the same bytes.
+    const theirs = after.papers.find((paper) => paper.kind === "lto_permit");
+    expect(new Uint8Array(await (await get("ryan", `/api/customer-papers/${theirs?.id}`)).arrayBuffer())).toHaveLength(11);
+
+    // The next order finds it on their file.
+    const next = await place("ryan", { customerId: hospital, items: [line()] });
+    expect((await order("ryan", next.body.id)).paperList.find((row) => row.kind === "lto_permit")).toMatchObject({
+      onFile: true,
+      onCustomer: true,
+    });
+
+    // Taken off the order as the wrong file: off their file too.
+    expect((await post("ryan", `/api/papers/${paperId}/remove`)).status).toBe(200);
+    const gone = await read<CustomerDetail>("ryan", `/api/customers/${hospital}`);
+    expect(gone.papers.some((paper) => paper.kind === "lto_permit")).toBe(false);
+  });
+
+  it("a patient's ID on their order goes on their file; a prescription is asked again", async () => {
+    const patient = (
+      (await (
+        await post("sarla", "/api/customers", {
+          kind: "patient",
+          name: "Lito Cruz",
+          phone: "0917 555 0177",
+          city: "Pasay",
+          paymentTerms: "cod",
+        })
+      ).json()) as { id: number }
+    ).id;
+    const made = await place("ryan", { customerId: patient, items: [line({ priceKind: "patient" })], type: "patient" });
+    expect(made.status, JSON.stringify(made.body)).toBe(200);
+    expect((await upload("ryan", made.body.id, "valid_id", png())).status).toBe(200);
+    expect((await upload("ryan", made.body.id, "prescription", png())).status).toBe(200);
+    const detail = await read<CustomerDetail>("ryan", `/api/customers/${patient}`);
+    expect(detail.papers.map((paper) => paper.kind).sort()).toEqual(["prescription", "valid_id"]);
+    const next = await place("ryan", { customerId: patient, items: [line({ priceKind: "patient" })], type: "patient" });
+    const list = (await order("ryan", next.body.id)).paperList;
+    expect(list.find((row) => row.kind === "valid_id")).toMatchObject({ onFile: true, onCustomer: true });
+    expect(list.find((row) => row.kind === "prescription")).toMatchObject({ onFile: false });
+  });
+
   it("bills as the company itself, keeps the doctor, and numbers orders one after another", async () => {
     const doctor = (
       (await (

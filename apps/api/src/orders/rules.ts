@@ -8,6 +8,7 @@ import { poExpected, RX_DIVISIONS } from "./divisions";
 import { FINANCE_ROLES } from "../finance/rules";
 import type { Role } from "../people/roles";
 import type {
+  CustomerPaperKind,
   BoardTab,
   Desk,
   HoldRole,
@@ -300,6 +301,9 @@ export const NEXT_OF: Record<OrderStatus, string> = {
 export const PAPER_LABEL: Record<PaperKind, string> = {
   po: "Customer's PO",
   hospital_doc: "Hospital's papers",
+  bir_2303: "BIR 2303",
+  lto_permit: "LTO permit",
+  business_permit: "Business permit",
   payment_proof: "Proof of payment",
   prescription: "Prescription",
   valid_id: "Patient's ID",
@@ -310,6 +314,30 @@ export const PAPER_LABEL: Record<PaperKind, string> = {
   other: "Other paper",
 };
 export const PAPER_KINDS = Object.keys(PAPER_LABEL) as PaperKind[];
+
+/** A business's three papers, picked on the order (27 Nov) instead of one "their papers". */
+const BUSINESS_PAPERS: PaperKind[] = ["bir_2303", "lto_permit", "business_permit"];
+/** A patient's own papers: theirs, not the order's, when the customer is the patient. */
+const PATIENT_OWN_PAPERS: PaperKind[] = ["prescription", "valid_id", "senior_id"];
+
+/** What an order's paper is on the customer's own file (27 Nov: the papers a MedRep attaches to an
+ *  order are the customer's too): a business's BIR 2303, LTO permit and business permit, and the
+ *  older "their papers" as another file; a patient's prescription, ID and senior / PWD ID when the
+ *  customer is the patient (one bought through a hospital is the patient's, not the hospital's).
+ *  The PO, the guarantee letter, the proof of payment and the receipt stay with the order. */
+export function customerPaperOf(kind: PaperKind, customerKind: string): CustomerPaperKind | null {
+  if (BUSINESS_PAPERS.includes(kind)) return kind as CustomerPaperKind;
+  if (kind === "hospital_doc") return customerKind === "patient" ? null : "other";
+  if (PATIENT_OWN_PAPERS.includes(kind) && customerKind === "patient") return kind as CustomerPaperKind;
+  return null;
+}
+
+/** The customer's papers that count on each order without attaching them again: an ID and a
+ *  business's papers stay good; a prescription is for one order's medicines, so it is asked again. */
+export function lastingPapersOf(customerKind: string, customerPapers: CustomerPaperKind[]): PaperKind[] {
+  const lasting: PaperKind[] = customerKind === "patient" ? ["valid_id", "senior_id", ...BUSINESS_PAPERS] : BUSINESS_PAPERS;
+  return lasting.filter((kind) => customerPapers.includes(kind as CustomerPaperKind));
+}
 
 /** The company billing an order: the company itself, since the separation (Aryan, 26 Nov night:
  *  "no invoice from 2MG or GetMeds"); its papers print the name in its Company details. An older
@@ -338,13 +366,16 @@ export function paperList(
     noRxReason?: string | null;
   },
   onFile: PaperKind[],
-): { kind: PaperKind; label: string; needed: boolean; why: string | null; onFile: boolean }[] {
+  /** The customer's own lasting papers (lastingPapersOf): they count as on file. */
+  onCustomer: PaperKind[] = [],
+): { kind: PaperKind; label: string; needed: boolean; why: string | null; onFile: boolean; onCustomer: boolean }[] {
   const row = (kind: PaperKind, needed: boolean, why: string | null) => ({
     kind,
     label: PAPER_LABEL[kind],
     needed,
     why,
-    onFile: onFile.includes(kind),
+    onFile: onFile.includes(kind) || onCustomer.includes(kind),
+    onCustomer: !onFile.includes(kind) && onCustomer.includes(kind),
   });
   const patient = customer.patient ?? customer.kind === "patient";
   // Whatever the MedRep attached shows too, even a kind this buyer isn't expected to send.
@@ -415,7 +446,10 @@ export function paperList(
     ]);
   return withTheRest([
     ...poRow,
-    row("hospital_doc", false, "Their licence (LTO), accreditation or any paper they send"),
+    // A business's three papers (27 Nov), kept on its own file too.
+    row("bir_2303", false, "Their BIR 2303: kept on their file too"),
+    row("lto_permit", false, "Their LTO permit: kept on their file too"),
+    row("business_permit", false, "Their business permit: kept on their file too"),
     proof,
     RX_DIVISIONS.includes(customer.division ?? "")
       ? row(
