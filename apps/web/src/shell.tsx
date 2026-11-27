@@ -368,12 +368,11 @@ export function Shell() {
         </header>
         <main className="app-content min-w-0 flex-1 bg-white px-4 pt-6 pb-24 md:px-8 md:pb-10 print:p-0">
           {/* The way back sits in the page, as on a team's page: a small ‹ and where you are. */}
-          {location.pathname !== "/" &&
-            !OWN_BACK.some((test) => test.test(location.pathname)) &&
-            // Someone else's visits, plan or expenses draw their own way back to the report.
-            !(location.pathname.startsWith("/visits") && location.search.includes("person=")) && (
-              <PageBack trail={trailOf(space, location.pathname)} />
-            )}
+          {/* A person's visits and expenses too (Aryan, 28 Nov: "once it opens there is no back
+              button"): they were left out to draw their own, and never did. */}
+          {location.pathname !== "/" && !OWN_BACK.some((test) => test.test(location.pathname)) && (
+            <PageBack trail={trailOf(space, location.pathname)} />
+          )}
           <Outlet />
           <UndoConfirmBar />
           <Toasts />

@@ -15,7 +15,7 @@ import { useMe } from "../auth";
 import { EmptyState, NoResults } from "../no-results";
 import { Ring } from "../team/charts";
 import { manilaToday, RangePicker, short } from "../team/range";
-import { CARD, PageHead, PageState, peso } from "../ui";
+import { CARD, PageHead, PageState, peso, useOpenOnPress } from "../ui";
 import { PLAN_WORDS } from "./visit-plan";
 
 type Sort = "done" | "least" | "skipped" | "name";
@@ -37,6 +37,8 @@ export function FieldReportPage() {
   const unit = useTeamUnit();
   // Each person after their HQ (Aryan's phase 5, PLAN 269); found by it too.
   const { named } = useHqNames();
+  // A press anywhere on a person's row opens their visits, not only their name (28 Nov, PLAN 271).
+  const open = useOpenOnPress();
   const query = useQuery({
     queryKey: ["field", "report", from, to, unit],
     queryFn: () => api<FieldReport>(withUnit(`/api/field/report?from=${from}&to=${to}`, unit)),
@@ -190,7 +192,7 @@ export function FieldReportPage() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {rows.map((one) => (
-                <tr key={one.personId} className="hover:bg-slate-50/70">
+                <tr key={one.personId} onClick={open(`/visits?person=${one.personId}&day=${data.to}`)} className="cursor-pointer hover:bg-slate-50/70">
                   <td className="px-4 py-2.5">
                     <Link
                       to={`/visits?person=${one.personId}&day=${data.to}`}

@@ -6,6 +6,7 @@
 // each MedRep's actions (visits, expenses, location on the map, tour plan, attendance, day report).
 
 import type { LeadQueue, TeamToday } from "@2mg/api/mr";
+import type { LivePeople } from "@2mg/api/types";
 import { MEETING_WORDS, WORK_WORDS } from "@2mg/api/mr";
 import { useQuery } from "@tanstack/react-query";
 import { Trophy } from "lucide-react";
@@ -17,7 +18,7 @@ import { allItems, spaceFor } from "../menus";
 import { useHqNames } from "../team/hq-name";
 import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
 import { CARD, PageState, Panel, peso } from "../ui";
-import { ActionSheet, clockOf, dayWords, MrHead, useMrMe } from "./parts";
+import { ActionSheet, clockOf, dayWords, MrHead, mapLink, useMrMe } from "./parts";
 import { EmptyState, NoInvoicesArt } from "../no-results";
 
 /** The field on a lead's or head's Home (Aryan, 23 Nov: "how does what the MedReps do reach the
@@ -95,6 +96,11 @@ export function TeamHome() {
   const [picked, setPicked] = useState<TeamToday["people"][number] | null>(null);
   // Each person after their HQ (Aryan's phase 5, PLAN 269): "TAFT · Marwin Dy".
   const { named } = useHqNames();
+  // Where each one is now, from their phone (Aryan, 28 Nov: "what is the difference between Team
+  // today and Where the team is?": none worth a page, PLAN 271): a person's row says they are
+  // live, and pressing it opens where they are and their places today.
+  const live = useQuery({ queryKey: ["field", "live"], queryFn: () => api<LivePeople>("/api/field/where"), refetchInterval: 60_000 });
+  const placeOf = new Map((live.data?.people ?? []).filter((one) => one.place).map((one) => [one.personId, one]));
   const data = query.data;
   if (!data) return <PageState query={query} what="the team" />;
   const t = data.totals;
@@ -141,7 +147,7 @@ export function TeamHome() {
       )}
 
       <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-        <Panel title="Today" count={data.people.length} actions={<Link to="/field/live" className="text-xs font-semibold text-sky-700 hover:underline">Where they are</Link>}>
+        <Panel title="Today" count={data.people.length} actions={<Link to="/field/live" className="text-xs font-semibold text-sky-700 hover:underline">Everyone on the map</Link>}>
           <ul className="divide-y divide-slate-100">
             {data.people.map((one) => (
               <li key={one.id}>
@@ -154,6 +160,11 @@ export function TeamHome() {
                       {one.bookedAmount ? ` · ${peso(one.bookedAmount)} ordered` : ""}
                       {one.at ? ` · at ${one.at}` : ""}
                     </span>
+                    {placeOf.has(one.id) && (
+                      <span className="mt-0.5 inline-flex items-center gap-1 text-[11.5px] font-semibold text-emerald-700">
+                        <span className="size-1.5 rounded-full bg-emerald-500" aria-hidden="true" /> Live: their place now
+                      </span>
+                    )}
                   </span>
                   <span className="shrink-0 text-right">
                     <span className={`block text-sm font-semibold ${one.started ? "text-sky-600" : "text-rose-600"}`}>
@@ -258,9 +269,15 @@ export function TeamHome() {
           sub={picked.started ? `${picked.workType ? WORK_WORDS[picked.workType] : ""} since ${clockOf(picked.started)}` : "Absent today"}
           onClose={() => setPicked(null)}
           actions={[
+            {
+              label: "Where they are now",
+              hint: placeOf.get(picked.id)?.atVisit ? `At ${placeOf.get(picked.id)?.atVisit}` : "From their phone",
+              hidden: !placeOf.has(picked.id),
+              onPick: () => window.open(mapLink(placeOf.get(picked.id)?.place ?? ""), "_blank", "noreferrer"),
+            },
+            { label: "Their places today", onPick: () => navigate(`/field/map?person=${picked.id}`) },
             { label: "View visits", onPick: () => navigate(`/visits?person=${picked.id}`) },
             { label: "View expenses", onPick: () => navigate(`/visits/expenses?person=${picked.id}`) },
-            { label: "View location on map", onPick: () => navigate(`/field/map?person=${picked.id}`) },
             { label: "Manage tour plan", onPick: () => navigate(`/field/plan?person=${picked.id}`) },
             { label: "View attendance", onPick: () => navigate(`/field/reports?view=attendance&person=${picked.id}`) },
             { label: "Day report", onPick: () => navigate(`/field/day-report?person=${picked.id}`) },

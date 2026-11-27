@@ -15,7 +15,7 @@ import { EmptyState, NoResults } from "../no-results";
 import type { MapPeople } from "../mr/map";
 import { clockOf, mapLink } from "../mr/parts";
 import { useHqNames } from "../team/hq-name";
-import { CARD, PageHead, PageState } from "../ui";
+import { CARD, PageHead, PageState, useOpenOnPress } from "../ui";
 
 const ago = (iso: string | null) => {
   if (!iso) return null;
@@ -37,6 +37,8 @@ export function FieldLivePage() {
   const dayOf = new Map((places.data?.people ?? []).map((one) => [one.id, one.points]));
   // Each person after their HQ (Aryan's phase 5, PLAN 269); found by it too.
   const { named } = useHqNames();
+  // A press anywhere on a person's card opens their visits, not only their name (28 Nov, PLAN 271).
+  const open = useOpenOnPress();
   const [q, setQ] = useState("");
   const data = query.data;
   if (!data) return <PageState query={query} what="where the team is" />;
@@ -66,7 +68,7 @@ export function FieldLivePage() {
       </label>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {rows.map((one) => (
-          <article key={one.personId} className={`${CARD} flex flex-col gap-2 p-4`}>
+          <article key={one.personId} onClick={open(`/visits?person=${one.personId}`)} className={`${CARD} flex cursor-pointer flex-col gap-2 p-4 hover:border-emerald-300`}>
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <Link

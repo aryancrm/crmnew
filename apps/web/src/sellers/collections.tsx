@@ -12,7 +12,7 @@ import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
 import { useMe } from "../auth";
 import { shortPeso } from "../ceo";
 import { seatWords } from "../seat-words";
-import { CARD, count, dayLabel, PageHead, PageState } from "../ui";
+import { CARD, count, dayLabel, PageHead, PageState, useOpenOnPress } from "../ui";
 import { EmptyState } from "../no-results";
 
 /** The desks that open the books (Zoho's documents). */
@@ -32,6 +32,8 @@ export function CollectionsPage() {
   // The oldest 300 listed; every one on "Show all". The total and the boxes always count them all
   // (Aryan, 28 Nov: "Yes, fix it", PLAN 267).
   const [all, setAll] = useState(false);
+  // A press anywhere on a customer's row opens the customer, not only the name (28 Nov, PLAN 271).
+  const open = useOpenOnPress();
   const query = useQuery({
     queryKey: ["my", "collections", unit, all],
     queryFn: () => api<Collections>(withUnit(`/api/my/collections${all ? "?all=1" : ""}`, unit)),
@@ -92,7 +94,7 @@ export function CollectionsPage() {
               </tr>
             )}
             {data.rows.map((row) => (
-              <tr key={row.customerId} className="hover:bg-slate-50/60">
+              <tr key={row.customerId} onClick={open(`/customers/${row.customerId}`)} className="cursor-pointer hover:bg-slate-50/60">
                 <td className="px-4 py-2.5">
                   <Link to={`/customers/${row.customerId}`} className="font-semibold text-slate-900 hover:underline">
                     {row.customer}

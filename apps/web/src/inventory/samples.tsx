@@ -11,7 +11,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
-import { Dialog, PageState, useAction } from "../ui";
+import { Dialog, PageState, useAction, useOpenOnPress } from "../ui";
 import { EmptyState } from "../no-results";
 
 const CARD = "rounded-xl border border-slate-200 bg-white";
@@ -271,6 +271,8 @@ export function MySamplesPage() {
 
 export function TeamSamplesPage() {
   const [params, setParams] = useSearchParams();
+  // A press anywhere on a row opens it, not only its name (Aryan, 28 Nov, PLAN 271).
+  const open = useOpenOnPress();
   const month = params.get("month") ?? thisMonth();
   const query = useQuery({ queryKey: ["samples", "team", month], queryFn: () => api<TeamSamples>(`/api/samples/team?month=${month}`) });
   const run = useRun();
@@ -350,7 +352,7 @@ export function TeamSamplesPage() {
             </thead>
             <tbody>
               {data.reps.map((one) => (
-                <tr key={one.personId} className="border-t border-slate-100">
+                <tr key={one.personId} onClick={open(`/me/samples?rep=${one.personId}`)} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50">
                   <td className="px-3 py-2">
                     <Link to={`/me/samples?rep=${one.personId}`} className="font-semibold text-brand hover:underline">
                       {one.name}
@@ -390,7 +392,11 @@ export function TeamSamplesPage() {
         <section className={CARD}>
           <h2 className="border-b border-slate-100 px-4 py-3 text-sm font-semibold">Given by doctor</h2>
           {data.doctors.map((one) => (
-            <div key={`${one.customerId}-${one.person}`} className="flex justify-between gap-2 border-b border-slate-100 px-4 py-2 text-sm last:border-b-0">
+            <div
+              key={`${one.customerId}-${one.person}`}
+              onClick={open(`/customers/${one.customerId}`)}
+              className="flex cursor-pointer justify-between gap-2 border-b border-slate-100 px-4 py-2 text-sm last:border-b-0 hover:bg-slate-50"
+            >
               <span>
                 <Link to={`/customers/${one.customerId}`} className="font-semibold text-brand hover:underline">
                   {one.doctor}

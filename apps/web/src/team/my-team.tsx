@@ -52,7 +52,7 @@ import { OfficeWork } from "./office-work";
 import { RangePicker, short } from "./range";
 import { TeamChart } from "./tree";
 import { ZoomBox } from "./zoom";
-import { count, PageState, manilaDay } from "../ui";
+import { count, PageState, manilaDay, useOpenOnPress } from "../ui";
 import { TONE, type Tone, toneOf } from "./pace";
 import { OrderCardItem } from "../orders/board";
 import { EmptyState, NoInvoicesArt } from "../no-results";
@@ -409,6 +409,8 @@ function PerformanceTable({
   seatHref: (seatId: number) => string;
 }) {
   const unitName = new Map(units.map((one) => [one.id, one.name]));
+  // A press anywhere on a row opens the person's page, not only their name (28 Nov, PLAN 271).
+  const open = useOpenOnPress();
   const rows = seats
     .filter((seat) => seat.person)
     .sort((a, b) => b.sold - a.sold || b.today - a.today);
@@ -442,7 +444,7 @@ function PerformanceTable({
             const stopped = seat.stages.held + seat.stages.sentBack;
             const hq = hqOfSeat(seat);
             return (
-              <tr key={seat.seatId}>
+              <tr key={seat.seatId} onClick={open(seatHref(seat.seatId))} className="cursor-pointer hover:bg-slate-50">
                 <td>
                   <span className="mr-1.5 text-[11px] text-slate-400 tabular-nums">
                     {seat.today > 0 ? n + 1 : "–"}

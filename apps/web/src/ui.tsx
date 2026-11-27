@@ -2,7 +2,7 @@
 
 import { X } from "lucide-react";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ApiFailure } from "./api";
 import { Loading } from "./no-results";
 
@@ -585,4 +585,17 @@ export function useLook<T extends string>(key: string, looks: readonly (readonly
     }
   };
   return [look, pick] as const;
+}
+
+/** A row or card that opens its page when pressed anywhere on it (Aryan, 28 Nov: "only the name
+ *  opens it; the whole block should open its things"), as `onClick={open("/visits?person=1")}`. A
+ *  press on a link or a button inside it still does that one's own job, and selecting its text
+ *  doesn't open it. The name inside stays a link, for the keyboard. */
+export function useOpenOnPress(): (to: string) => (event: React.MouseEvent) => void {
+  const navigate = useNavigate();
+  return (to) => (event) => {
+    if ((event.target as HTMLElement).closest("a, button, input, select, textarea, label")) return;
+    if (window.getSelection()?.toString()) return;
+    navigate(to);
+  };
 }
