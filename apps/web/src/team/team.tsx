@@ -15,7 +15,7 @@ import { api } from "../api";
 import { useMe } from "../auth";
 import { counted, exactPeso, monthName, monthShort, shiftMonth, shortPeso } from "../ceo";
 import { avatarTone, initials } from "../look";
-import { LeadGlance } from "./glance";
+import { LeadGlance, OrdersNowCard } from "./glance";
 import { PageState } from "../ui";
 import { PACE_TEXT, PaceBar } from "../company/ceo-home";
 import { seatWords } from "../seat-words";
@@ -149,10 +149,40 @@ export function TeamSalesPage() {
         </nav>
       </header>
 
+      {/* My KPIs first on the head of the Prescription business's Home (Aryan, 28 Nov: "put My KPIs
+          at the very top this time", PLAN 274). */}
+      {!whole && rxMentor && <MyKpis />}
       {/* First, as his plan's Home has them (Aryan, 28 Nov, PLAN 259): how the month's orders came
           (doctor referral, doctor dispense, guarantee letters, others), then the team's tree (each
           HQ and who works it; the channels' tiles a press away). */}
       {!whole && <OrderWaysCard month={asked} />}
+      {/* Where his team's orders stand now, as on the CEO's Home (Aryan, 28 Nov: "the CEO's Home shows
+          which order is at Management, which at Finance; it should show on Javed's too", PLAN 274). */}
+      {!whole && rxMentor && board.data && (
+        <OrdersNowCard
+          board={board.data}
+          title="Orders right now"
+          to="/orders"
+          head={
+            <>
+              <div className="text-3xl font-semibold tracking-tight text-slate-900 tabular-nums">
+                {(board.data.totals.waiting + board.data.totals.stopped).toLocaleString("en-PH")}{" "}
+                <span className="text-sm font-normal text-slate-500">open</span>
+              </div>
+              <div className={`text-xs ${board.data.totals.stopped ? "text-rose-600" : "text-slate-500"}`}>
+                {[
+                  `${board.data.stagesNow.management.toLocaleString("en-PH")} at Management`,
+                  `${board.data.stagesNow.finance.toLocaleString("en-PH")} with Finance`,
+                  `${(board.data.stagesNow.dispatch + board.data.stagesNow.road).toLocaleString("en-PH")} with Dispatch or on the road`,
+                  board.data.totals.stopped ? `${board.data.totals.stopped.toLocaleString("en-PH")} on hold or sent back` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </div>
+            </>
+          }
+        />
+      )}
       {/* The orders each person placed (Aryan, 28 Nov: "on Javed's screen, like the Orders tab"). */}
       {!whole && <OrdersByPerson month={asked} board={board.data} />}
       {!whole && top && <TeamDrill top={top} pace={data.pace} running={data.running} me={me} range={span} />}
@@ -160,7 +190,7 @@ export function TeamSalesPage() {
       {/* The hub's My KPIs: their own and their team's (Aryan, 20 Nov; PLAN 23). */}
       {/* What the MedReps are doing in the field today, and what of it waits for this lead. */}
       {!whole && <FieldTodayCard />}
-      {!whole && <MyKpis />}
+      {!whole && !rxMentor && <MyKpis />}
 
       {/* The month's four figures on the company's view only: a lead's or head's My Team KPI above
           says the same (sold against target, today, orders raised and held), so they aren't twice
