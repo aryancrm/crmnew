@@ -36,7 +36,13 @@ const ok = async (who: string, path: string, body: unknown = {}) => {
 const onShelf = async () =>
   (await rows<{ n: number }>(db, sql`select coalesce(sum(s.qty), 0)::int as n from stock s join batch b on b.id = s.batch_id where b.medicine_id = ${medicine}`))[0]?.n ?? 0;
 async function visitWith(kind: "doctor" | "hospital"): Promise<number> {
-  const added = await post("sarla", "/api/customers", { kind, name: `Sample ${kind} ${Math.random().toString(36).slice(2, 7)}`, city: "Pasay" });
+  const added = await post("sarla", "/api/customers", {
+    kind,
+    name: `Sample ${kind} ${Math.random().toString(36).slice(2, 7)}`,
+    city: "Pasay",
+    // A doctor is known by their PRC licence number (27 Nov).
+    ...(kind === "doctor" ? { licenceNo: String(1_000_000 + Math.floor(Math.random() * 8_999_999)) } : {}),
+  });
   const customer = (await added.json()) as { id: number };
   const [visit] = await rows<{ id: number }>(
     db,

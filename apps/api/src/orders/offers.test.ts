@@ -57,7 +57,7 @@ beforeAll(async () => {
   const add = async (body: unknown) =>
     ((await (await post("sarla", "/api/customers", body)).json()) as { id: number }).id;
   hospital = await add({ kind: "hospital", name: "Offer Test Hospital", city: "Pasay", paymentTerms: "cod" });
-  doctor = await add({ kind: "doctor", name: "Dr. Offer Test", city: "Pasay", paymentTerms: "cod" });
+  doctor = await add({ kind: "doctor", name: "Dr. Offer Test", city: "Pasay", paymentTerms: "cod", licenceNo: "0567002" });
   const catalogue = await read<Catalogue>("sarla", "/api/inventory/medicines");
   const row = catalogue.rows.find(
     (item) => item.prices.hospital !== undefined && item.prices.doctor !== undefined && item.total >= 200 && !item.promo,

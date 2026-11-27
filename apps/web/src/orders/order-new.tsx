@@ -232,6 +232,10 @@ function Label({ text, needed }: { text: string; needed?: boolean }) {
   );
 }
 const HELP = "text-[11px] text-ink-2";
+/** A customer's own number (CUS-00012) when the row carries one. */
+const codeOf = (row: object): string | null =>
+  "code" in row && typeof row.code === "string" && row.code ? row.code : null;
+
 /** A kind of customer in the plural, for "HOS orders are usually for hospitals and doctors". */
 const BUYER_WORDS: Record<string, string> = {
   hospital: "hospitals",
@@ -2023,6 +2027,10 @@ export function OrderNew({
                               <span className="font-semibold text-slate-900">{row.name}</span>
                               {row.specialty && (
                                 <span className="text-slate-500"> · {row.specialty}</span>
+                              )}
+                              {/* The doctor's own number: which doctor it is (one doctor, one entry). */}
+                              {codeOf(row) && (
+                                <span className="ml-1.5 font-mono text-[11px] text-slate-400">{codeOf(row)}</span>
                               )}
                             </button>
                           </li>

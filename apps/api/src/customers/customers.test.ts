@@ -151,6 +151,7 @@ describe("adding a customer", () => {
       specialty: "Oncology",
       worksAt: ids.sanjuan,
       phone: "0918 222 3344",
+      licenceNo: "0456789",
       // A MedRep can't set terms or credit: these are ignored.
       paymentTerms: "days",
       paymentDays: 60,
@@ -179,6 +180,32 @@ describe("adding a customer", () => {
       // The doctor he just added, and the patient the Online desk added.
       toReview: 2,
     });
+  });
+
+  it("knows a doctor by their PRC licence number: one doctor, one entry (27 Nov)", async () => {
+    const doctor = (body: Record<string, unknown>) => post("ryan", "/api/customers", { kind: "doctor", city: "Pasay", ...body });
+    // No PRC number: not added.
+    const none = await doctor({ name: "Dr. Lea Uy" });
+    expect(none.status).toBe(400);
+    expect((await none.json()).error.field).toBe("licenceNo");
+    // Dr. Marco Reyes's number typed another way ("PRC 0456789" is 456789): refused, named.
+    const again = await doctor({ name: "Dr. M. Reyes", licenceNo: "PRC 456789" });
+    expect(again.status).toBe(409);
+    expect((await again.json()).error).toMatchObject({ field: "licenceNo", message: expect.stringMatching(/^That PRC licence number is already Dr\. Marco Reyes \(CUS-\d{5}\)/) });
+    // "Dr." is a title: "Marco Reyes" in Makati is the doctor already there.
+    const title = await doctor({ name: "Marco Reyes", city: "Makati", licenceNo: "0999111" });
+    expect(title.status).toBe(409);
+    expect((await title.json()).error.field).toBe("name");
+    // The form shows the doctor already on file as soon as the number is typed.
+    const found = (await (await get("ryan", "/api/customers/check?kind=doctor&licence=0456789")).json()) as { matches: CustomerMatch[] };
+    expect(found.matches[0]).toMatchObject({ name: "Dr. Marco Reyes", why: "licence" });
+    // Another doctor's number can't be given to a doctor already on file either (Management adds
+    // this one, so nothing is left waiting for review).
+    const other = await post("sarla", "/api/customers", { kind: "doctor", name: "Dr. Lea Uy", city: "Pasay", licenceNo: "0777123" });
+    expect(other.status).toBe(200);
+    const id = (await other.json()).id as number;
+    const taken = await post("sarla", `/api/customers/${id}`, { kind: "doctor", name: "Dr. Lea Uy", city: "Pasay", licenceNo: "456789" });
+    expect(taken.status).toBe(409);
   });
 
   it("takes a hospital from the field only with its licence, then its three papers (the hub's form)", async () => {
@@ -270,6 +297,7 @@ describe("adding a customer", () => {
     const notHospital = await post("ryan", "/api/customers", {
       kind: "doctor",
       name: "Dr. Other",
+      licenceNo: "0456790",
       worksAt: ids.rosario,
     });
     expect((await notHospital.json()).error.field).toBe("worksAt");

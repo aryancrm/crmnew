@@ -1043,7 +1043,7 @@ describe("papers, the billing company, the doctor and order numbers", () => {
   it("bills as the company itself, keeps the doctor, and numbers orders one after another", async () => {
     const doctor = (
       (await (
-        await post("sarla", "/api/customers", { kind: "doctor", name: "Ana Reyes", city: "Pasay" })
+        await post("sarla", "/api/customers", { kind: "doctor", name: "Ana Reyes", city: "Pasay", licenceNo: "0567001" })
       ).json()) as { id: number }
     ).id;
     expect(

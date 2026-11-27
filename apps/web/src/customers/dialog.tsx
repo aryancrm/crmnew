@@ -114,16 +114,18 @@ export function CustomerDialog(props: {
     !props.can.manage &&
     lacking.length > 0 &&
     (kind === "hospital" || !followUp);
-  const typed = useSettled({ name: name.trim(), phone: phone.trim(), kind });
+  const typed = useSettled({ name: name.trim(), phone: phone.trim(), kind, licence: kind === "doctor" ? licenceNo.trim() : "" });
   const check = useQuery({
     queryKey: ["customers", "check", typed],
     queryFn: async () =>
       (
         await api<{ matches: CustomerMatch[] }>(
-          `/api/customers/check?kind=${typed.kind}&name=${encodeURIComponent(typed.name)}&phone=${encodeURIComponent(typed.phone)}`,
+          `/api/customers/check?kind=${typed.kind}&name=${encodeURIComponent(typed.name)}&phone=${encodeURIComponent(typed.phone)}&licence=${encodeURIComponent(typed.licence)}`,
         )
       ).matches,
-    enabled: !now && (typed.name.length >= 3 || typed.phone.replace(/\D/g, "").length >= 7),
+    enabled:
+      !now &&
+      (typed.name.length >= 3 || typed.phone.replace(/\D/g, "").length >= 7 || typed.licence.replace(/\D/g, "").length >= 4),
   });
   const matches = now ? [] : (check.data ?? []);
 
@@ -252,6 +254,28 @@ export function CustomerDialog(props: {
           </Field>
         </div>
 
+        {/* One doctor, one entry (Aryan, 27 Nov): a doctor is known by their PRC licence number,
+            which is on every prescription; one already on file shows as soon as it is typed. */}
+        {kind === "doctor" && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="PRC licence no." error={action.at("licenceNo")}>
+              {(field) => (
+                <input
+                  {...field}
+                  className={`${INPUT} font-mono`}
+                  inputMode="numeric"
+                  placeholder="e.g. 0123456 (on their prescription)"
+                  value={licenceNo}
+                  onChange={(event) => setLicenceNo(event.target.value)}
+                />
+              )}
+            </Field>
+            <p className="self-end pb-2.5 text-[11.5px] leading-snug text-slate-500">
+              One doctor, one entry: no two doctors have the same PRC number.
+            </p>
+          </div>
+        )}
+
         {matches.length > 0 && (
           <div className="flex flex-col gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-950">
             <div className="font-semibold">Already on file? Check before adding again.</div>
@@ -263,7 +287,7 @@ export function CustomerDialog(props: {
                   {match.city ? ` · ${match.city}` : ""}
                   {match.phone ? ` · ${match.phone}` : ""}
                   {match.medrep ? ` · looked after by ${match.medrep}` : ""}
-                  {match.why === "phone" ? " · same number" : ""}
+                  {match.why === "phone" ? " · same number" : match.why === "licence" ? " · same PRC number" : ""}
                 </span>
                 {match.mine &&
                   (props.onPick ? (
@@ -493,14 +517,14 @@ export function CustomerDialog(props: {
 
         {/* What isn't needed to place an order, folded: open it to add more. */}
         <details
-          open={Boolean(address || specialty || (!licensed && (licenceNo || licenceExpires || tin)) || note)}
+          open={Boolean(address || specialty || (!licensed && ((kind !== "doctor" && licenceNo) || licenceExpires || tin)) || note)}
           className="group rounded-xl border border-slate-200 bg-white"
         >
           <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2.5 text-xs font-semibold text-slate-600 hover:text-slate-900">
             More details
             <span className="text-[11px] font-normal text-slate-400">
               Address
-              {business && !licensed ? (kind === "doctor" ? ", PRC licence" : ", LTO, TIN") : ""}, note ·
+              {business && !licensed ? (kind === "doctor" ? ", specialty, licence expiry, TIN" : ", LTO, TIN") : ""}, note ·
               optional
             </span>
           </summary>
@@ -530,17 +554,19 @@ export function CustomerDialog(props: {
             )}
             {business && !licensed && (
               <div className="grid gap-3 sm:grid-cols-3">
-                <Field label={kind === "doctor" ? "PRC licence no." : "LTO number"}>
-                  {(field) => (
-                    <input
-                      {...field}
-                      className={INPUT}
-                      value={licenceNo}
-                      onChange={(event) => setLicenceNo(event.target.value)}
-                    />
-                  )}
-                </Field>
-                <Field label="Valid until" error={action.at("licenceExpires")}>
+                {kind !== "doctor" && (
+                  <Field label="LTO number">
+                    {(field) => (
+                      <input
+                        {...field}
+                        className={INPUT}
+                        value={licenceNo}
+                        onChange={(event) => setLicenceNo(event.target.value)}
+                      />
+                    )}
+                  </Field>
+                )}
+                <Field label={kind === "doctor" ? "PRC licence valid until" : "Valid until"} error={action.at("licenceExpires")}>
                   {(field) => (
                     <input
                       {...field}

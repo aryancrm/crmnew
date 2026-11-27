@@ -147,6 +147,7 @@ export async function seedDemoTeam(db: Database, password: string): Promise<bool
     city: "Cebu City",
     specialty: "Medical oncology",
     phone: "0917 812 4410",
+    licenceNo: "0223344",
   });
   const tan = await addCustomer(db, joy, {
     kind: "doctor",
@@ -154,6 +155,7 @@ export async function seedDemoTeam(db: Database, password: string): Promise<bool
     city: "Mandaue",
     specialty: "Hematology",
     phone: "0919 330 2287",
+    licenceNo: "0334455",
   });
   const davaoDoctors = await rows<{ id: number }>(
     db,

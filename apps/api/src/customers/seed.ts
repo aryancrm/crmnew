@@ -104,6 +104,7 @@ export async function seedDemoCustomers(db: Database): Promise<boolean> {
     specialty: "Hematology",
     worksAt: ids[0],
     phone: "0918 222 3344",
+    licenceNo: "PRC-0112233",
   });
   await addCustomer(db, jane, {
     kind: "patient",

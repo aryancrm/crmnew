@@ -516,28 +516,31 @@ export async function readCustomerPaper(
 export async function checkCustomer(
   db: Database,
   me: Me,
-  input: { name?: string; phone?: string; kind?: CustomerKind },
+  input: { name?: string; phone?: string; kind?: CustomerKind; licence?: string },
 ): Promise<CustomerMatch[]> {
   const key = phoneKey(input.phone);
   const name = (input.name ?? "").trim().toLowerCase();
-  if (!key && name.length < 3) return [];
+  // A doctor's PRC licence number: the doctor already on file shows as soon as it is typed.
+  const prc = input.kind === "doctor" ? prcKey(input.licence) : null;
+  if (!key && !prc && name.length < 3) return [];
   const like = `%${name.replace(/[%_\\]/g, "\\$&")}%`;
   const byPhone = key ? sql`c.phone_key = ${key}` : sql`false`;
+  const byLicence = prc ? sql`(c.kind = 'doctor' and ${prcOf(sql`c.licence_no`)} = ${prc})` : sql`false`;
   const byName = name.length >= 3 ? sql`lower(c.name) like ${like}` : sql`false`;
-  const found = await rows<Omit<CustomerMatch, "why"> & { phoneHit: boolean }>(
+  const found = await rows<Omit<CustomerMatch, "why"> & { phoneHit: boolean; licenceHit: boolean }>(
     db,
     sql`${team(me)}
         select c.id::int as id, c.kind, c.name, c.city, c.phone, ${holder} as medrep,
-          coalesce((${seen(me)}), false) as mine, (${byPhone}) as "phoneHit"
+          coalesce((${seen(me)}), false) as mine, (${byPhone}) as "phoneHit", (${byLicence}) as "licenceHit"
         from customer c
-        where c.active and (${byPhone} or ${byName})
-        order by "phoneHit" desc, (c.kind = ${input.kind ?? ""}::text) desc, lower(c.name)
+        where c.active and (${byPhone} or ${byLicence} or ${byName})
+        order by "licenceHit" desc, "phoneHit" desc, (c.kind = ${input.kind ?? ""}::text) desc, lower(c.name)
         limit 8`,
   );
-  return found.map(({ phoneHit, phone, ...match }) => ({
+  return found.map(({ phoneHit, licenceHit, phone, ...match }) => ({
     ...match,
     phone: maskPhone(phone),
-    why: phoneHit ? "phone" : "name",
+    why: licenceHit ? "licence" : phoneHit ? "phone" : "name",
   }));
 }
 
@@ -613,6 +616,45 @@ function termsOf(input: CustomerInput): { terms: string; days: number | null } {
   return { terms, days: input.paymentDays };
 }
 
+/** A doctor's PRC licence number as it is compared: its digits, without zeros in front ("PRC
+ *  0123456" and "123456" are one). Null when it has too few digits to be one. */
+export const prcKey = (licence: string | null | undefined): string | null => {
+  const digits = (licence ?? "").replace(/\D/g, "").replace(/^0+/, "");
+  return digits.length >= 4 ? digits : null;
+};
+const prcOf = (column: SQL) => sql`ltrim(regexp_replace(coalesce(${column}, ''), '[^0-9]', '', 'g'), '0')`;
+
+/** A doctor's name as it is compared for a second copy: "Dr." or "Dra." in front is a title, not
+ *  part of the name ("Dr. Marco Reyes" and "Marco Reyes" in one city are one doctor). */
+const nameOf = (kind: CustomerKind, name: string) =>
+  kind === "doctor" ? name.trim().toLowerCase().replace(/^(dra|dr|doc)\.?\s+/, "") : name.trim().toLowerCase();
+const nameColumn = (kind: CustomerKind) =>
+  kind === "doctor" ? sql`regexp_replace(lower(trim(c.name)), '^(dra|dr|doc)\\.?\\s+', '')` : sql`lower(c.name)`;
+
+/**
+ * One doctor, one entry (Aryan, 27 Nov: "a doctor has one name, it must not repeat; give them a
+ * unique number; think what is right"): a doctor is known by their PRC licence number, which is on
+ * every prescription. A second doctor with the same number is refused, as a patient's phone is.
+ * Two people adding the same number at the same moment are put one after the other by a lock.
+ */
+async function samePrcRefused(tx: Runner, key: string | null, except: number | null): Promise<void> {
+  if (!key) return;
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`doctor-prc:${key}`}, 0))`);
+  const [twin] = await rows<{ name: string; code: string; medrep: string | null }>(
+    tx,
+    sql`select c.name, c.code, ${holder} as medrep from customer c
+        where c.active and c.kind = 'doctor' and ${prcOf(sql`c.licence_no`)} = ${key} and c.id <> ${except ?? 0}
+        order by c.id limit 1`,
+  );
+  if (twin)
+    throw new Refusal(
+      409,
+      "duplicate",
+      `That PRC licence number is already ${twin.name} (${twin.code})${twin.medrep ? `, looked after by ${twin.medrep}` : ""}. Open them instead of adding them again.`,
+      "licenceNo",
+    );
+}
+
 /**
  * A customer is known by their phone number (and then by their CUS number): the same number
  * can't be a second customer of the same kind. Two people adding the same number at the same
@@ -656,11 +698,22 @@ export async function addCustomer(
   const city = clean(input.city);
   return db.transaction(async (tx) => {
     await samePhoneRefused(tx, input.kind, phoneKey(input.phone), null);
+    if (input.kind === "doctor") {
+      const prc = prcKey(input.licenceNo);
+      if (!prc)
+        throw new Refusal(
+          400,
+          "invalid",
+          "Type the doctor's PRC licence number. It is on their prescription, and it tells one doctor from another.",
+          "licenceNo",
+        );
+      await samePrcRefused(tx, prc, null);
+    }
     if (input.kind !== "patient") {
       const twin = await rows<{ medrep: string | null }>(
         tx,
         sql`select ${holder} as medrep from customer c
-            where c.kind = ${input.kind} and lower(c.name) = ${name.toLowerCase()} and lower(coalesce(c.city, '')) = ${(city ?? "").toLowerCase()}`,
+            where c.kind = ${input.kind} and ${nameColumn(input.kind)} = ${nameOf(input.kind, name)} and lower(coalesce(c.city, '')) = ${(city ?? "").toLowerCase()}`,
       );
       if (twin.length)
         throw new Refusal(
@@ -736,11 +789,13 @@ export async function saveCustomer(
     );
     if (!now) throw new Refusal(404, "not_found", "No such customer, or it isn't one of yours.");
     await samePhoneRefused(tx, now.kind, phoneKey(input.phone), id);
+    // A doctor on file from before may still have no PRC number; one typed must be theirs alone.
+    if (now.kind === "doctor") await samePrcRefused(tx, prcKey(input.licenceNo), id);
     if (now.kind !== "patient") {
       const twin = await rows(
         tx,
-        sql`select 1 from customer where kind = ${now.kind} and lower(name) = ${name.toLowerCase()}
-              and lower(coalesce(city, '')) = ${(city ?? "").toLowerCase()} and id <> ${id}`,
+        sql`select 1 from customer c where c.kind = ${now.kind} and ${nameColumn(now.kind)} = ${nameOf(now.kind, name)}
+              and lower(coalesce(c.city, '')) = ${(city ?? "").toLowerCase()} and c.id <> ${id}`,
       );
       if (twin.length)
         throw new Refusal(

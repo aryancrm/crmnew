@@ -115,6 +115,7 @@ export function customerRoutes(
         name: query.name,
         phone: query.phone,
         kind: picked,
+        licence: query.licence,
       }),
     });
   });

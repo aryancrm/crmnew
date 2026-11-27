@@ -1,10 +1,13 @@
-// The prescription business at a glance (Aryan, 19 Nov: "press RX: Honey, her whole team, what the
-// team is doing and where, right now; the sales they made, A to Z"; docs/CHANNEL-WORK.md RX): each
-// person's day (visits planned and done today, the last check-in and where), the month's
-// prescriptions (orders with the prescribing doctor), how many doctors prescribed and how many for
-// the first time, the doctors prescribing most, and the guarantee letters by agency (DSWD, PCSO, the
-// Office of the President…) from received to delivered, billed and paid. A seller sees their own; a
-// lead their team (the box picked); the CEO and the Admin any box.
+// Prescription sales (Aryan, 19 Nov: "press RX: Honey, her whole team, what the team is doing and
+// where, right now; the sales they made, A to Z"; renamed and made plain on 27 Nov, PLAN 250): the
+// orders that came with a doctor's prescription, this month. Each person's prescriptions, the
+// doctors who wrote them and how many for the first time, the value; their day (visits planned and
+// done today, the last check-in and where); the doctors prescribing most; and the guarantee letters
+// by agency (DSWD, PCSO, the Office of the President…) from received to delivered, billed and paid.
+// A seller sees their own; a lead their team (the box picked); the CEO and the Admin any box.
+//
+// A doctor is the doctor on this CRM's order; Zoho's history has only the name typed on each order,
+// read as typed. The business's totals count each doctor once, not once per seller.
 
 import { type SQL, sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
@@ -34,7 +37,18 @@ export async function rxBusiness(db: Database, me: Me): Promise<RxBusiness> {
   }
   const empty: RxBusiness = {
     today,
-    summary: { prescriptions: 0, prescribers: 0, newPrescribers: 0, value: 0, visitsToday: 0, visitsDoneToday: 0, glOpen: 0, glOpenAmount: 0, glPaid: 0 },
+    summary: {
+      prescriptions: 0,
+      prescribers: 0,
+      newPrescribers: 0,
+      value: 0,
+      visitsToday: 0,
+      visitsDoneToday: 0,
+      glOpen: 0,
+      glOpenAmount: 0,
+      glPaid: 0,
+      lastOrderOn: null,
+    },
     people: [],
     doctors: [],
     letters: [],
@@ -57,11 +71,13 @@ export async function rxBusiness(db: Database, me: Me): Promise<RxBusiness> {
   // The guarantee letters' programmes (the order's source, as the hub and Zoho wrote it).
   const PROGRAMMES = ["DSWD", "PCSO", "Office of the President", "IAPF", "Malasakit", "Other"];
   const programmeList = sql.join(PROGRAMMES.map((one) => sql`${one}`), sql`, `);
-  const [people, doctors, letters] = await Promise.all([
+  const [people, totals, doctors, letters] = await Promise.all([
+    // Each seat of the box: its seller (an empty seat with prescriptions this month too, so the
+    // rows add up to the business's totals).
     rows<RxBusiness["people"][number]>(
       db,
-      sql`with rx as ${rx}, firsts as (select seat, dkey, min(day) as since from rx group by seat, dkey)
-        select p.id::int as "personId", p.name, s.title, a.name as area,
+      sql`with rx as materialized ${rx}, firsts as materialized (select seat, dkey, min(day) as since from rx group by seat, dkey)
+        select s.id::int as "seatId", p.id::int as "personId", coalesce(p.name, 'Empty seat') as name, s.title, a.name as area,
           (select count(*) from visit v where v.seat_id = s.id and v.day = ${today}::date)::int as "visitsToday",
           (select count(*) from visit v where v.seat_id = s.id and v.day = ${today}::date and v.status = 'done')::int as "doneToday",
           (select c.name from visit v join customer c on c.id = v.customer_id where v.seat_id = s.id and v.checked_in_at is not null
@@ -75,15 +91,29 @@ export async function rxBusiness(db: Database, me: Me): Promise<RxBusiness> {
               and ${placed} >= ${first}::date)
             + (select count(*) from past_order po join zoho_seller zs on zs.name = po.seller
               where zs.seat_id = s.id and po.source in (${programmeList}) and po.status <> 'void' and po.ordered_on >= ${first}::date))::int as letters
-        from seat s join seat_holder h on h.seat_id = s.id and h.kind = 'holder' and ${inForce("h", today)}
-          join person p on p.id = h.person_id left join area a on a.id = s.area_id
-        where s.id in (${seats}) and s.active and s.module = 'medrep'
-        order by p.name`,
+        from seat s
+          left join lateral (select h.person_id from seat_holder h where h.seat_id = s.id and h.kind = 'holder' and ${inForce("h", today)}
+            order by h.starts_on desc, h.id desc limit 1) held on true
+          left join person p on p.id = held.person_id
+          left join area a on a.id = s.area_id
+        where s.id in (${seats}) and s.active
+          and ((s.module = 'medrep' and p.id is not null) or exists (select 1 from rx where rx.seat = s.id and rx.day >= ${first}::date))
+        order by 3`,
+    ),
+    // The business's own totals: each doctor once, however many sellers they wrote through.
+    rows<{ prescriptions: number; value: number; prescribers: number; newPrescribers: number; lastOrderOn: string | null }>(
+      db,
+      sql`with rx as materialized ${rx}
+        select (select count(*) from rx where day >= ${first}::date)::int as prescriptions,
+          coalesce((select sum(total) from rx where day >= ${first}::date), 0)::float8 as value,
+          (select count(distinct dkey) from rx where day >= ${first}::date)::int as prescribers,
+          (select count(*) from (select dkey from rx group by dkey having min(day) >= ${first}::date) f)::int as "newPrescribers",
+          (select to_char(max(day), 'YYYY-MM-DD') from rx) as "lastOrderOn"`,
     ),
     // The doctors prescribing most in the last 90 days.
     rows<RxBusiness["doctors"][number]>(
       db,
-      sql`with rx as ${rx}
+      sql`with rx as materialized ${rx}
         select max(rx.doctor_id)::int as "customerId", max(rx.doctor) as name,
           (select c.specialty from customer c where c.id = max(rx.doctor_id)) as specialty,
           (select c.city from customer c where c.id = max(rx.doctor_id)) as city,
@@ -95,7 +125,7 @@ export async function rxBusiness(db: Database, me: Me): Promise<RxBusiness> {
           to_char(max(rx.day), 'YYYY-MM-DD') as "lastOn", to_char(min(rx.day), 'YYYY-MM-DD') as "firstOn"
         from rx group by rx.dkey
         having count(*) filter (where rx.day > ${addDays(today, -90)}::date) > 0
-        order by 7 desc limit 20`,
+        order by value desc limit 20`,
     ),
     // Guarantee letters by agency (the last 12 months): this CRM's from received to paid, Zoho's
     // history as served.
@@ -127,18 +157,20 @@ export async function rxBusiness(db: Database, me: Me): Promise<RxBusiness> {
     return { programme, received: pair("received"), serving: pair("serving"), billed: pair("billed"), paid: pair("paid"), zoho: pair("zoho") };
   });
   const open = letters.filter((one) => one.stage !== "paid" && one.stage !== "zoho");
+  const total = totals[0];
   return {
     today,
     summary: {
-      prescriptions: people.reduce((sum, one) => sum + one.prescriptions, 0),
-      prescribers: people.reduce((sum, one) => sum + one.prescribers, 0),
-      newPrescribers: people.reduce((sum, one) => sum + one.newPrescribers, 0),
-      value: people.reduce((sum, one) => sum + one.value, 0),
+      prescriptions: total?.prescriptions ?? 0,
+      prescribers: total?.prescribers ?? 0,
+      newPrescribers: total?.newPrescribers ?? 0,
+      value: total?.value ?? 0,
       visitsToday: people.reduce((sum, one) => sum + one.visitsToday, 0),
       visitsDoneToday: people.reduce((sum, one) => sum + one.doneToday, 0),
       glOpen: open.reduce((sum, one) => sum + one.count, 0),
       glOpenAmount: open.reduce((sum, one) => sum + one.amount, 0),
       glPaid: letters.filter((one) => one.stage === "paid").reduce((sum, one) => sum + one.amount, 0),
+      lastOrderOn: total?.lastOrderOn ?? null,
     },
     people,
     doctors,

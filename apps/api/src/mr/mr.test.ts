@@ -116,7 +116,7 @@ describe("who works the field", () => {
 
 describe("customers on the field's lists", () => {
   it("shows the customers the MedRep looks after as KOLs, hospitals and KBLs, a new one added on the CRM's own form", async () => {
-    const added = await ok("ryan", "/api/customers", { kind: "doctor", name: "Dr. Ana Lim", city: "Pasay", specialty: "Cardiology" });
+    const added = await ok("ryan", "/api/customers", { kind: "doctor", name: "Dr. Ana Lim", city: "Pasay", specialty: "Cardiology", licenceNo: "0567003" });
     customers.doctor2 = added.id as number;
     const kols = await read<ClientList>("ryan", "/api/mr/clients?kind=doctor");
     expect(kols.rows.map((one) => one.name)).toEqual(["Dr. Ana Lim", "Dr. Marco Reyes"]);

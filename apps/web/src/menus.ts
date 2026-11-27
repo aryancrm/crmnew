@@ -1241,7 +1241,7 @@ function ownDesk(me: Me): Space {
               "Team",
             ),
             { to: "/care-groups", label: "Care groups", icon: Users, short: "Groups" },
-            { to: "/rx/business", label: "Prescriptions and letters", icon: Stethoscope },
+            { to: "/rx/business", label: "Prescription sales", icon: Stethoscope },
             { to: "/to-call", label: "Refills due", icon: Pill, badge: "refills", short: "Refills" },
             // A coach who leads RX Business's field CHCs too (Honey, 19 Nov's sheet): their visits.
             ...(me.divisions?.includes("RX Business")
@@ -1319,7 +1319,7 @@ function ownDesk(me: Me): Space {
           ...desk([
             home,
             { to: "/rx/field", label: "Field team", icon: Stethoscope },
-            { to: "/rx/business", label: "Prescriptions and letters", icon: Stethoscope },
+            { to: "/rx/business", label: "Prescription sales", icon: Stethoscope },
             { to: "/my-team", label: "Whole business", icon: Users, teams: true },
             { to: "/care-groups", label: "Care groups", icon: Users, short: "Groups" },
             { to: "/team-scores", label: "Scorecards", icon: Gauge, short: "Scores" },

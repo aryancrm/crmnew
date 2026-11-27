@@ -718,7 +718,8 @@ export type CustomerMatch = {
   medrep: string | null;
   /** Whether this person may open it. */
   mine: boolean;
-  why: "phone" | "name";
+  /** What matched: the phone, a doctor's PRC licence number, or the name. */
+  why: "phone" | "licence" | "name";
 };
 
 /** What a MedRep's area holds, for Home and My area. */
@@ -6137,7 +6138,9 @@ export type RxField = {
 export type RxBusiness = {
   today: string;
   summary: {
+    /** This month: orders that came with a doctor's prescription, and their ₱. */
     prescriptions: number;
+    /** Doctors who wrote this month, and those writing for the first time: each doctor once. */
     prescribers: number;
     newPrescribers: number;
     value: number;
@@ -6146,9 +6149,13 @@ export type RxBusiness = {
     glOpen: number;
     glOpenAmount: number;
     glPaid: number;
+    /** The latest order counted (this CRM's or Zoho's), YYYY-MM-DD. */
+    lastOrderOn: string | null;
   };
   people: {
-    personId: number;
+    seatId: number;
+    /** Null for an empty seat that still has prescriptions this month. */
+    personId: number | null;
     name: string;
     title: string;
     area: string | null;
@@ -6165,7 +6172,8 @@ export type RxBusiness = {
     letters: number;
   }[];
   doctors: {
-    customerId: number;
+    /** The CRM's customer, when one of the doctor's orders names it (Zoho's history doesn't). */
+    customerId: number | null;
     name: string;
     specialty: string | null;
     city: string | null;
