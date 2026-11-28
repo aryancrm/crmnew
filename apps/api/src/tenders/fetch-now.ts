@@ -19,7 +19,7 @@
 // the workflow's own limit) another is refused; once the run is in, it can be pressed again at once.
 
 import { type ChildProcess, spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { appendFile, existsSync, mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sql } from "drizzle-orm";
@@ -78,11 +78,14 @@ let dispatch = async (portal: Portal): Promise<void> => {
 
 // One robot per portal on this computer: a PS-PhilGEPS fetch never blocks a PhilGEPS one (change log 187).
 const children = new Map<Portal, ChildProcess>();
+/** What the robot printed when it ran on this computer, for reading later. */
+const LOG = resolve(WORKER, "../../.data/robot.log");
 
 /** Starts one portal's robot on this computer, its steps one after the other (a step that fails stops the
  *  rest, as in the workflow); it hands in to this API with the key. */
 let runHere = (portal: Portal, onEnd: (problem: string | null) => void): void => {
   if (!existsSync(join(WORKER, "node_modules"))) throw new Error("The robot is not installed on this computer (in workers/tender-finder run: npm ci)");
+  mkdirSync(dirname(LOG), { recursive: true });
   const steps = SCRIPT[portal];
   const step = (at: number): void => {
     const args = steps[at];
@@ -98,7 +101,12 @@ let runHere = (portal: Portal, onEnd: (problem: string | null) => void): void =>
     });
     children.set(portal, robot);
     const say = (chunk: Buffer) => {
-      for (const line of chunk.toString().split(/\r?\n/)) if (line.trim()) console.log(`robot (${portal}): ${line}`);
+      for (const line of chunk.toString().split(/\r?\n/)) {
+        if (!line.trim()) continue;
+        console.log(`robot (${portal}): ${line}`);
+        // Also kept in a file on this computer (.data/robot.log, git ignores it), to read without the terminal
+        appendFile(LOG, `${new Date().toISOString()} ${portal}: ${line}\n`, () => {});
+      }
     };
     robot.stdout?.on("data", say);
     robot.stderr?.on("data", say);
