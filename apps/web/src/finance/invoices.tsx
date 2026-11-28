@@ -1,7 +1,7 @@
 // Invoices, as Zoho Books lists them: date, number, order, customer, company, status, due
 // date, amount and balance, with tabs; and one invoice as a document with its payments.
 
-import type { DocLine, InvoiceDetail, InvoiceList, InvoiceTab } from "@2mg/api/types";
+import type { BookList, DocLine, InvoiceDetail, InvoiceList, InvoiceTab } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
 import { Search, X } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
@@ -55,6 +55,7 @@ export function Invoices() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const [typed, setTyped] = useState(params.get("q") ?? "");
+  const source = params.get("source") === "zoho" ? "zoho" : "crm";
   const set = (changes: Record<string, string>) => {
     const next = new URLSearchParams(params);
     for (const [key, value] of Object.entries(changes)) {
@@ -71,6 +72,18 @@ export function Invoices() {
     }, 300);
     return () => clearTimeout(timer);
   }, [typed]);
+  const zohoSearch = ["q", "page"]
+    .map((key) =>
+      params.get(key) ? `${key}=${encodeURIComponent(params.get(key) as string)}` : "",
+    )
+    .filter(Boolean)
+    .join("&");
+  const zohoQuery = useQuery({
+    queryKey: ["books", "invoice", "inline", zohoSearch],
+    queryFn: () => api<BookList>(`/api/books/invoice?${zohoSearch}`),
+    enabled: source === "zoho",
+    placeholderData: (previous) => previous,
+  });
   const search = ["tab", "q", "customer", "page"]
     .map((key) =>
       params.get(key) ? `${key}=${encodeURIComponent(params.get(key) as string)}` : "",
@@ -80,8 +93,100 @@ export function Invoices() {
   const query = useQuery({
     queryKey: ["finance", "invoices", search],
     queryFn: () => api<InvoiceList>(`/api/invoices?${search}`),
+    enabled: source === "crm",
     placeholderData: (previous) => previous,
   });
+
+  if (source === "zoho") {
+    const zData = zohoQuery.data;
+    if (!zData) return <PageState query={zohoQuery} what="historical invoices" />;
+    const zPages = Math.max(1, Math.ceil(zData.total / zData.perPage));
+    const zPage = zData.page;
+    return (
+      <div className="mx-auto max-w-[88rem]">
+        <PageHead
+          title="Invoices"
+          sub={`Historical invoices brought over from Zoho Books, under ${ownName}`}
+          actions={
+            <div className="inline-flex rounded-xl bg-slate-100 p-1 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => set({ source: "" })}
+                className="rounded-lg px-3 py-1.5 text-slate-600 hover:text-slate-900"
+              >
+                CRM
+              </button>
+              <button
+                type="button"
+                className="rounded-lg bg-white px-3 py-1.5 text-slate-900 shadow-sm"
+              >
+                Historical (Zoho)
+              </button>
+            </div>
+          }
+        />
+        <Card className="overflow-x-auto">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line-soft px-4 py-3">
+            <div className="relative w-full max-w-sm">
+              <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-slate-400" />
+              <input
+                type="search"
+                aria-label="Search historical invoices"
+                value={typed}
+                onChange={(event) => setTyped(event.target.value)}
+                placeholder="Invoice number or customer"
+                className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/70 pr-3 pl-9 text-sm focus:border-brand focus:bg-white focus:ring-2 focus:ring-brand/10 focus:outline-none"
+              />
+            </div>
+            <div className="text-[13px] text-ink-2">{count(zData.total)} historical invoices</div>
+          </div>
+          {zData.rows.length === 0 ? (
+            <NoResults title="No historical invoice matches.">Clear the search to see all.</NoResults>
+          ) : (
+            <table className="t">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Invoice</th>
+                  <th>Customer</th>
+                  <th>Status</th>
+                  <th>Due date</th>
+                  <th className="num">Amount</th>
+                  <th className="num">Balance due</th>
+                </tr>
+              </thead>
+              <tbody>
+                {zData.rows.map((row) => (
+                  <tr
+                    key={row.id}
+                    onClick={() => navigate(`/books/invoices/${row.id}`)}
+                    className="cursor-pointer hover:bg-slate-50"
+                  >
+                    <td className="whitespace-nowrap">{dayLabel(row.date)}</td>
+                    <td className="font-semibold text-brand-dark">{row.number}</td>
+                    <td>{row.party ?? "—"}</td>
+                    <td className="uppercase text-xs text-slate-600">{row.status}</td>
+                    <td className="whitespace-nowrap">{row.dueDate ? dayLabel(row.dueDate) : "—"}</td>
+                    <td className="num tabular-nums">{peso(row.total)}</td>
+                    <td className="num font-semibold tabular-nums">{peso(row.balance)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {zPages > 1 && (
+            <div className="flex items-center justify-between border-t border-line-soft px-4 py-3 text-xs text-slate-600">
+              <span>Page {zPage} of {zPages}</span>
+              <div className="flex gap-2">
+                <Button disabled={zPage <= 1} onClick={() => set({ page: String(zPage - 1) })}>Previous</Button>
+                <Button disabled={zPage >= zPages} onClick={() => set({ page: String(zPage + 1) })}>Next</Button>
+              </div>
+            </div>
+          )}
+        </Card>
+      </div>
+    );
+  }
   const data = query.data;
   if (!data) return <PageState query={query} what="the invoices" />;
   const pages = Math.max(1, Math.ceil(data.total / data.pageSize));
@@ -107,12 +212,21 @@ export function Invoices() {
           )
         }
         actions={
-          <Link
-            to="/books/invoices"
-            className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-          >
-            Historical (Zoho) →
-          </Link>
+          <div className="inline-flex rounded-xl bg-slate-100 p-1 text-xs font-semibold">
+            <button
+              type="button"
+              className="rounded-lg bg-white px-3 py-1.5 text-slate-900 shadow-sm"
+            >
+              CRM
+            </button>
+            <button
+              type="button"
+              onClick={() => set({ source: "zoho" })}
+              className="rounded-lg px-3 py-1.5 text-slate-600 hover:text-slate-900"
+            >
+              Historical (Zoho)
+            </button>
+          </div>
         }
       >
         <Tabs

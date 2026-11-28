@@ -1,7 +1,7 @@
 // Finance's money lists: payments received in a month, what each customer owes by how late,
 // and money to give back for cancelled orders.
 
-import type { OwedList, PaymentList, RefundList, RefundOwed } from "@2mg/api/types";
+import type { BookList, OwedList, PaymentList, RefundList, RefundOwed } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -69,6 +69,19 @@ const shiftMonth = (month: string, by: number) => {
 export function Payments() {
   const { params, set, typed, setTyped } = useFilters();
   const navigate = useNavigate();
+  const source = params.get("source") === "zoho" ? "zoho" : "crm";
+  const zohoSearch = ["q", "page"]
+    .map((key) =>
+      params.get(key) ? `${key}=${encodeURIComponent(params.get(key) as string)}` : "",
+    )
+    .filter(Boolean)
+    .join("&");
+  const zohoQuery = useQuery({
+    queryKey: ["books", "customer_payment", "inline", zohoSearch],
+    queryFn: () => api<BookList>(`/api/books/customer_payment?${zohoSearch}`),
+    enabled: source === "zoho",
+    placeholderData: (previous) => previous,
+  });
   const search = ["month", "method", "q", "page"]
     .map((key) =>
       params.get(key) ? `${key}=${encodeURIComponent(params.get(key) as string)}` : "",
@@ -78,8 +91,96 @@ export function Payments() {
   const query = useQuery({
     queryKey: ["finance", "payments", search],
     queryFn: () => api<PaymentList>(`/api/payments?${search}`),
+    enabled: source === "crm",
     placeholderData: (previous) => previous,
   });
+
+  if (source === "zoho") {
+    const zData = zohoQuery.data;
+    if (!zData) return <PageState query={zohoQuery} what="historical payments" />;
+    const zPages = Math.max(1, Math.ceil(zData.total / zData.perPage));
+    const zPage = zData.page;
+    return (
+      <div className="mx-auto max-w-[88rem]">
+        <PageHead
+          title="Payments received"
+          sub="Historical customer payments brought over from Zoho Books"
+          actions={
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                to="/books/paymentsreceived/new"
+                className="inline-flex items-center rounded-xl bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-dark"
+              >
+                + Record receipt / advance
+              </Link>
+              <div className="inline-flex rounded-xl bg-slate-100 p-1 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => set({ source: "" })}
+                  className="rounded-lg px-3 py-1.5 text-slate-600 hover:text-slate-900"
+                >
+                  CRM
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg bg-white px-3 py-1.5 text-slate-900 shadow-sm"
+                >
+                  Historical (Zoho)
+                </button>
+              </div>
+            </div>
+          }
+        />
+        <Card className="overflow-x-auto">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line-soft px-4 py-3">
+            <SearchBox value={typed} onChange={setTyped} placeholder="Payment #, reference or customer" />
+            <div className="text-[13px] text-ink-2">{count(zData.total)} historical payments</div>
+          </div>
+          {zData.rows.length === 0 ? (
+            <NoResults title="No historical payment matches.">Clear the search to see all.</NoResults>
+          ) : (
+            <table className="t">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Payment #</th>
+                  <th>Customer</th>
+                  <th>Reference</th>
+                  <th className="num">Amount</th>
+                  <th className="num">Unused</th>
+                </tr>
+              </thead>
+              <tbody>
+                {zData.rows.map((row) => (
+                  <tr
+                    key={row.id}
+                    onClick={() => navigate(`/books/paymentsreceived/${row.id}`)}
+                    className="cursor-pointer hover:bg-slate-50"
+                  >
+                    <td className="whitespace-nowrap">{dayLabel(row.date)}</td>
+                    <td className="font-semibold text-brand-dark">{row.number}</td>
+                    <td>{row.party ?? "—"}</td>
+                    <td className="text-slate-600">{row.reference ?? "—"}</td>
+                    <td className="num font-semibold tabular-nums">{peso(row.total)}</td>
+                    <td className="num tabular-nums">{peso(row.balance)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {zPages > 1 && (
+            <div className="flex items-center justify-between border-t border-line-soft px-4 py-3 text-xs text-slate-600">
+              <span>Page {zPage} of {zPages}</span>
+              <div className="flex gap-2">
+                <Button disabled={zPage <= 1} onClick={() => set({ page: String(zPage - 1) })}>Previous</Button>
+                <Button disabled={zPage >= zPages} onClick={() => set({ page: String(zPage + 1) })}>Next</Button>
+              </div>
+            </div>
+          )}
+        </Card>
+      </div>
+    );
+  }
   const data = query.data;
   if (!data) return <PageState query={query} what="the payments" />;
   const notMoney = data.byMethod
@@ -103,12 +204,21 @@ export function Payments() {
             >
               + Record receipt / advance
             </Link>
-            <Link
-              to="/books/paymentsreceived"
-              className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              Historical (Zoho) →
-            </Link>
+            <div className="inline-flex rounded-xl bg-slate-100 p-1 text-xs font-semibold">
+              <button
+                type="button"
+                className="rounded-lg bg-white px-3 py-1.5 text-slate-900 shadow-sm"
+              >
+                CRM
+              </button>
+              <button
+                type="button"
+                onClick={() => set({ source: "zoho" })}
+                className="rounded-lg px-3 py-1.5 text-slate-600 hover:text-slate-900"
+              >
+                Historical (Zoho)
+              </button>
+            </div>
             <div className="flex items-center gap-1 rounded-xl bg-white p-1 shadow-card">
               <button
                 type="button"

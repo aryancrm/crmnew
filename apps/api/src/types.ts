@@ -7712,6 +7712,7 @@ export type BankLineRow = {
   docKind: BookKind | null;
   reconciled: boolean;
   suggestions?: BankEntry[];
+  ruleMatch?: { id: number; name: string; pattern: string; direction: "out" | "in"; accountName: string } | null;
 };
 export type BankStatement = { account: string; view: string; counts: Record<string, number>; booksBalance: number; lines: BankLineRow[] };
 export type BankReconcileView = {

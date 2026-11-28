@@ -488,6 +488,10 @@ export function bookActionRoutes(app: Hono<Env>, db: Database): void {
     await deleteBankRule(db, me(c), Number(c.req.param("id")));
     return c.json({ ok: true });
   });
+  app.post("/api/books-bank/rules/:id/delete", async (c) => {
+    await deleteBankRule(db, me(c), Number(c.req.param("id")));
+    return c.json({ ok: true });
+  });
   app.get("/api/books-locks", async (c) => c.json(await bookLocks(db, me(c))));
   app.post("/api/books-locks/:module", async (c) => {
     await setLock(db, me(c), c.req.param("module"), await readBody(c, z.object({ lockDate: DAY, reason: TEXT(300) })));

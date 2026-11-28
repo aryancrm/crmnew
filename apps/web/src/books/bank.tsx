@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { useMe } from "../auth";
 import { EmptyState } from "../no-results";
 import { useAction } from "../ui";
 import { Plain, Primary, ZIN } from "./forms";
@@ -166,6 +167,7 @@ export function BankStatementPage() {
             )}
           </div>
         </div>
+        <BankRulesPanel />
         <div className="mb-3 flex flex-wrap items-center gap-4">
           {["uncategorized", "matched", "categorized", "excluded", "all"].map((key) => (
             <button key={key} type="button" onClick={() => setParams({ account, ...(key === "uncategorized" ? {} : { view: key }) })} className={view === key ? "font-semibold text-[#408dfb]" : "text-[#4b4f63]"}>
@@ -201,11 +203,35 @@ export function BankStatementPage() {
 function LineRow({ line, open, onOpen }: { line: BankStatement["lines"][number]; open: boolean; onOpen: () => void }) {
   const queries = useQueryClient();
   const action = useAction();
+  const me = useMe().data;
+  const choices = useLedgerChoices().data;
   const run = (path: string, body: unknown) =>
     void action.run(async () => {
       await api(path, { body });
       await queries.invalidateQueries({ queryKey: ["books"] });
     });
+  const applyRule = () => {
+    const rule = line.ruleMatch;
+    if (!rule || !choices) return;
+    if (rule.direction === "out") {
+      run(`/api/books-bank/line/${line.id}/categorize`, {
+        as: "expense",
+        expense: {
+          account: rule.accountName,
+          taxInclusive: false,
+          costCentre: choices.options["Cost Centre"]?.[0] ?? "",
+          type: choices.options.Type?.[0] ?? "Services",
+          department: choices.options.Department?.[0] ?? "",
+          pic: me?.name ?? "Finance",
+        },
+      });
+    } else {
+      run(`/api/books-bank/line/${line.id}/categorize`, {
+        as: "deposit",
+        deposit: { account: rule.accountName },
+      });
+    }
+  };
   return (
     <>
       <tr className="border-b border-[#ebeaf2] align-top hover:bg-[#f9f9fb]">
@@ -232,6 +258,16 @@ function LineRow({ line, open, onOpen }: { line: BankStatement["lines"][number];
                   {one.feeDiff ? ` · Record ${zMoney(one.feeDiff)} bank fee` : ""}
                 </button>
               ))}
+              {line.ruleMatch && (
+                <button
+                  type="button"
+                  disabled={action.busy || !choices}
+                  onClick={applyRule}
+                  className="block rounded bg-[#eef4ff] px-2 py-0.5 text-left text-[12px] font-medium text-[#1c5bd9] hover:bg-[#dfeaff]"
+                >
+                  Apply rule: {line.ruleMatch.name} → {line.ruleMatch.accountName}
+                </button>
+              )}
               <div className="flex gap-3">
                 <button type="button" className="text-[#1c5bd9]" onClick={onOpen}>
                   Categorize
@@ -269,6 +305,86 @@ function LineRow({ line, open, onOpen }: { line: BankStatement["lines"][number];
         </tr>
       )}
     </>
+  );
+}
+
+type BankRule = { id: number; name: string; pattern: string; direction: "out" | "in"; accountName: string; note: string | null };
+
+function BankRulesPanel() {
+  const queries = useQueryClient();
+  const action = useAction();
+  const choices = useLedgerChoices().data;
+  const rules = useQuery({ queryKey: ["books", "bank", "rules"], queryFn: () => api<BankRule[]>("/api/books-bank/rules") });
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [pattern, setPattern] = useState("");
+  const [direction, setDirection] = useState<"out" | "in">("out");
+  const [accountName, setAccountName] = useState("");
+
+  const add = () =>
+    void action.run(async () => {
+      await api("/api/books-bank/rules", { body: { name, pattern, direction, accountName } });
+      setName("");
+      setPattern("");
+      setAccountName("");
+      await queries.invalidateQueries({ queryKey: ["books", "bank"] });
+    });
+
+  return (
+    <div className="mb-4 rounded-md border border-[#ebeaf2] p-3">
+      <div className="flex items-center justify-between">
+        <span className="text-[13px] font-medium text-[#212529]">
+          Bank Rules ({rules.data?.length ?? 0})
+          <span className="ml-2 text-[12px] font-normal text-[#6c718a]">Auto-suggest categorization on matching statement lines</span>
+        </span>
+        <button type="button" onClick={() => setOpen((v) => !v)} className="text-[12px] font-medium text-[#1c5bd9] hover:underline">
+          {open ? "Hide rules" : "Manage rules"}
+        </button>
+      </div>
+      {open && (
+        <div className="mt-3 space-y-3 border-t border-[#ebeaf2] pt-3">
+          {action.problem && <div className="text-[12px] text-[#b91c1c]">{action.problem.message}</div>}
+          <div className="grid gap-2 sm:grid-cols-5">
+            <input className={ZIN} placeholder="Rule name (e.g. InstaPay Fee)" value={name} onChange={(e) => setName(e.target.value)} />
+            <input className={ZIN} placeholder="Text to match (e.g. INSTAPAY)" value={pattern} onChange={(e) => setPattern(e.target.value)} />
+            <select className={ZIN} value={direction} onChange={(e) => setDirection(e.target.value as "out" | "in")}>
+              <option value="out">Withdrawal (Expense)</option>
+              <option value="in">Deposit (Income)</option>
+            </select>
+            <select className={ZIN} value={accountName} onChange={(e) => setAccountName(e.target.value)}>
+              <option value="">Pick account…</option>
+              {(choices?.accounts ?? []).map((a) => (
+                <option key={a.name} value={a.name}>{a.name}</option>
+              ))}
+            </select>
+            <Primary disabled={action.busy || !name.trim() || !pattern.trim() || !accountName} onClick={add}>
+              Add rule
+            </Primary>
+          </div>
+          {(rules.data ?? []).length > 0 && (
+            <ul className="divide-y divide-[#ebeaf2] text-[12px]">
+              {(rules.data ?? []).map((r) => (
+                <li key={r.id} className="flex items-center justify-between gap-2 py-1.5">
+                  <span>
+                    <b>{r.name}</b> · matches <code>{r.pattern}</code> ({r.direction === "out" ? "Expense" : "Deposit"}) → <b>{r.accountName}</b>
+                  </span>
+                  <Plain
+                    onClick={() =>
+                      void action.run(async () => {
+                        await api(`/api/books-bank/rules/${r.id}/delete`, { body: {} });
+                        await queries.invalidateQueries({ queryKey: ["books", "bank"] });
+                      })
+                    }
+                  >
+                    Remove
+                  </Plain>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
