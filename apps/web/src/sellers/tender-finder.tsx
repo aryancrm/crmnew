@@ -164,6 +164,25 @@ function FetchStatus({ name, state, runs, stage, onClose }: { name: string; stat
   return null;
 }
 
+/** Whether a portal's status box shows: after a press on this page, and also whenever a Fetch now of that
+ *  portal is running or has just ended, so a page opened later (or after signing in again) still follows
+ *  it (the developer, 28 Nov), until a person closes it. */
+function useFollow(running: PortalFetchState["running"]) {
+  const [pressed, setPressed] = useState(false);
+  const [closed, setClosed] = useState<string | null>(null);
+  return {
+    shown: pressed || (running !== null && running.at !== closed),
+    follow: () => {
+      setPressed(true);
+      setClosed(null);
+    },
+    close: () => {
+      setPressed(false);
+      if (running) setClosed(running.at);
+    },
+  };
+}
+
 /** What a laptop log-in's last step means for the person who opened it. */
 const LOGIN_STEP: Record<string, { tone: Tone; title: string; said?: string; final?: boolean }> = {
   started: { tone: "work", title: "Chrome is open on this laptop", said: "Tick “I'm not a robot”, then the log-in goes through by itself." },
@@ -191,7 +210,7 @@ function PsFetch({ way, state, ps, runs }: { way: FoundList["robot"]["fetch"]["w
   const [since, setSince] = useState<{ server: string; local: number } | null>(null);
   const [now, setNow] = useState(Date.now());
   const [ended, setEnded] = useState<{ tone: Tone; title: string; said: string } | null>(null);
-  const [watching, setWatching] = useState(false);
+  const status = useFollow(state.running);
   const step = since && ps.login && Date.parse(ps.login.at) >= Date.parse(since.server) ? ps.login : null;
   const meaning = step ? LOGIN_STEP[step.outcome] : undefined;
   const loggingIn = since !== null && !connected;
@@ -199,7 +218,7 @@ function PsFetch({ way, state, ps, runs }: { way: FoundList["robot"]["fetch"]["w
   const running = state.running;
   const fetching = running !== null && !running.done;
   const fetchPs = async () => {
-    setWatching(true);
+    status.follow();
     await api("/api/tenders/found/robot/fetch", { method: "POST", body: { portal: "ps" } });
     await queries.invalidateQueries({ queryKey: ["tenders", "found"] });
   };
@@ -232,7 +251,6 @@ function PsFetch({ way, state, ps, runs }: { way: FoundList["robot"]["fetch"]["w
   const press = () =>
     void action.run(async () => {
       setEnded(null);
-      setWatching(false);
       if (connected) return fetchPs();
       const { code, at } = await api<{ code: string; at: string }>("/api/tenders/found/ps/connect", { method: "POST", body: { purpose: "login" } });
       setSince({ server: at, local: Date.now() });
@@ -311,7 +329,7 @@ function PsFetch({ way, state, ps, runs }: { way: FoundList["robot"]["fetch"]["w
           {ended.tone === "bad" && <span className="mt-1 block text-slate-500">Put it right, then press Fetch PS-PhilGEPS now again.</span>}
         </StatusBox>
       )}
-      {watching && !loggingIn && !ended && <FetchStatus name="PS-PhilGEPS" state={state} runs={runs} stage={ps.stage} onClose={() => setWatching(false)} />}
+      {status.shown && !loggingIn && !ended && <FetchStatus name="PS-PhilGEPS" state={state} runs={runs} stage={ps.stage} onClose={status.close} />}
     </div>
   );
 }
@@ -322,7 +340,7 @@ function PsFetch({ way, state, ps, runs }: { way: FoundList["robot"]["fetch"]["w
 function FetchNow({ way, portal, state, runs, blocked }: { way: FoundList["robot"]["fetch"]["way"]; portal: "philgeps" | "ps"; state: PortalFetchState; runs: FindRunRow[]; blocked?: string | null }) {
   const queries = useQueryClient();
   const action = useAction();
-  const [watching, setWatching] = useState(false);
+  const status = useFollow(state.running);
   const running = state.running;
   const waiting = running !== null && !running.done;
   const name = PORTAL[portal];
@@ -343,7 +361,7 @@ function FetchNow({ way, portal, state, runs, blocked }: { way: FoundList["robot
           className="disabled:opacity-50"
           onClick={() =>
             void action.run(async () => {
-              setWatching(true);
+              status.follow();
               await api("/api/tenders/found/robot/fetch", { method: "POST", body: { portal } });
               await queries.invalidateQueries({ queryKey: ["tenders", "found"] });
             })
@@ -363,7 +381,7 @@ function FetchNow({ way, portal, state, runs, blocked }: { way: FoundList["robot
         </span>
       )}
       <Problem message={action.problem?.message} />
-      {watching && <FetchStatus name={name} state={state} runs={runs} onClose={() => setWatching(false)} />}
+      {status.shown && <FetchStatus name={name} state={state} runs={runs} onClose={status.close} />}
     </span>
   );
 }
