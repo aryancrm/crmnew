@@ -728,6 +728,30 @@ describe("the bidding system hands over (the bridge)", () => {
     await robot("run", { source: "ps", trigger: "feed", status: "success", summary: "From the bidding system: 1 PhilGEPS and 1 PS-PhilGEPS tenders" });
     expect(((await (await robot("feed-state")).json()) as { since: string }).since).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
+
+  it("a PS-PhilGEPS Bid Match tender for none of ours is only under Everything found, said read or not read yet", async () => {
+    process.env.TENDER_FINDER_KEY = KEY;
+    const bidMatch = (ref: string, title: string, details: Record<string, unknown>) => ({
+      source: "ps", ref_no: ref, title, procuring_entity: "Municipality of Talavera", publish_date: "2026-11-25", closing_date: "2099-12-14 10:00:00",
+      abc_amount: null, detail_link: `https://philgeps.gov.ph/tenders/viewBidNotice/${ref}`, items_text: null, details,
+    });
+    await robot("notices", {
+      notices: [
+        bidMatch("162556", "Supply and Delivery of anti-rabies vaccines", { page_read_at: "2026-11-28T05:40:00.000Z" }),
+        bidMatch("162557", "Procurement of Various Antibiotics", {}),
+      ],
+    });
+    const all = await list("hazel", "?view=all&source=ps");
+    expect(all.rows.filter((row) => row.refNo === "162556" || row.refNo === "162557").map((row) => [row.refNo, row.molecules, row.read])).toEqual(
+      expect.arrayContaining([
+        ["162556", [], true],
+        ["162557", [], false],
+      ]),
+    );
+    expect((await list("hazel", "?source=ps")).rows.map((row) => row.refNo)).not.toEqual(expect.arrayContaining(["162556"]));
+    expect((await list("hazel", "?source=ps")).rows.map((row) => row.refNo)).not.toContain("162557");
+    expect((await list("hazel", "?source=ps")).rows.every((row) => row.molecules.length > 0)).toBe(true);
+  });
 });
 
 describe("the robots' own records", () => {

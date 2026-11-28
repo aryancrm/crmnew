@@ -42,7 +42,13 @@ function closing(found: Pick<FoundTender, "closingAt" | "open">): { text: string
   };
 }
 
-function Molecules({ names }: { names: string[] }) {
+function Molecules({ names, read = true }: { names: string[]; read?: boolean }) {
+  if (names.length === 0 && !read)
+    return (
+      <span className="text-[12px] text-amber-700" title="The robot has not opened this notice's page yet; the next fetch reads it.">
+        not read yet
+      </span>
+    );
   if (names.length === 0) return <span className="text-[12px] text-slate-400">none of ours</span>;
   return (
     <span className="flex flex-wrap gap-1">
@@ -181,6 +187,15 @@ function useFollow(running: PortalFetchState["running"]) {
       if (running) setClosed(running.at);
     },
   };
+}
+
+/** A fetch is running (a press waiting for its run, PS-PhilGEPS's Sync on), or a run ended in the last 3 minutes. */
+function fetchBusy(robot: FoundList["robot"] | undefined): boolean {
+  if (!robot) return false;
+  if ([robot.fetch.philgeps, robot.fetch.ps].some((one) => one.running && !one.running.done)) return true;
+  if (robot.ps.status === "running") return true;
+  const last = robot.runs[0];
+  return Boolean(last && Date.now() - Date.parse(last.at) < 180_000);
 }
 
 /** What a laptop log-in's last step means for the person who opened it. */
@@ -616,12 +631,10 @@ export function TenderFinderPage() {
     queryKey: ["tenders", "found", sent],
     queryFn: () => api<FoundList>(`/api/tenders/found?${new URLSearchParams(Object.entries(sent).filter(([, value]) => value))}`),
     placeholderData: (before) => before,
-    // While Fetch now waits for its run, look again every 15 seconds so the new tenders show by themselves.
-    refetchInterval: (current) => {
-      const fetch = current.state.data?.robot.fetch;
-      const busy = [fetch?.philgeps, fetch?.ps].some((one) => one?.running && !one.running.done);
-      return busy ? 15_000 : false;
-    },
+    // The page keeps itself up to date (the developer, 28 Nov: "after fetching, the screen must reload by
+    // itself"): every 15 seconds while a fetch runs (a person's or the hourly one) and for 3 minutes after a
+    // run ends (the robot hands its tenders and papers in after it says it is done), else every minute.
+    refetchInterval: (current) => (fetchBusy(current.state.data?.robot) ? 15_000 : 60_000),
   });
   const data = query.data;
   if (!data) return <PageState query={query} what="the tenders found" />;
@@ -823,7 +836,7 @@ export function TenderFinderPage() {
                       <span className={`mt-0.5 block text-[11.5px] font-semibold ${close.tone}`}>{close.text}</span>
                     </td>
                     <td className="px-3 py-3">
-                      <Molecules names={found.molecules} />
+                      <Molecules names={found.molecules} read={found.read} />
                     </td>
                     <td className="px-3 py-3 text-right whitespace-nowrap">
                       <Link to={`/tenders/finder/${found.id}`} className="text-[12.5px] font-semibold text-emerald-700 hover:underline">
@@ -1387,7 +1400,8 @@ export function FoundTenderPage() {
   const queries = useQueryClient();
   const action = useAction();
   const [making, setMaking] = useState(false);
-  const query = useQuery({ queryKey: ["tenders", "found", "one", id], queryFn: () => api<FoundDetail>(`/api/tenders/found/${id}`) });
+  // A notice's papers arrive while a fetch runs: looked at again every minute, so they show by themselves.
+  const query = useQuery({ queryKey: ["tenders", "found", "one", id], queryFn: () => api<FoundDetail>(`/api/tenders/found/${id}`), refetchInterval: 60_000 });
   const data = query.data;
   if (!data) return <PageState query={query} what="the notice" />;
   const { found } = data;

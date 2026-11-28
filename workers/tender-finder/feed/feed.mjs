@@ -94,6 +94,9 @@ export function psNotice(row, headers, notice, reading) {
             matched_items: notice?.matched_items || [],
             documents,
             documents_status: documents.length ? 'downloaded' : null,
+            // When its page was last read, so the CRM tells "none of ours" from "not read yet" (left out when
+            // never read, so a run that could not read it does not wipe an earlier read)
+            ...(notice && !notice.error && notice.read_at ? { page_read_at: new Date(msOf(notice.read_at)).toISOString() } : {}),
             documents_items: (done.items || []).slice(0, 300),
             documents_bid_data_sheet: done.bid_data_sheet || null,
             documents_read: reading?.documents_read || null,

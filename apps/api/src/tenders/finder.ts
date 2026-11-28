@@ -277,7 +277,7 @@ type RobotItem = { line?: unknown; description?: unknown; item_no?: unknown; qua
 /** What of a notice's details is kept (and given back to the robot, which re-reads only what is new). */
 const KEPT = [
   "notice_type", "solicitation_no", "procurement_mode", "classification", "area_of_delivery", "delivery_period", "client_agency",
-  "contact_name", "status", "last_updated", "pre_bid", "bid_opening", "supplements_checked_at",
+  "contact_name", "status", "last_updated", "pre_bid", "bid_opening", "supplements_checked_at", "page_read_at",
 ] as const;
 function keptDetails(details: Record<string, unknown>): Record<string, unknown> {
   const kept: Record<string, unknown> = {};
@@ -564,16 +564,17 @@ const foundSelect = sql`select f.id::int as id, f.source, f.ref_no as "refNo", f
     to_char(f.first_seen_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "firstSeenAt", to_char(f.screened_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "screenedAt", coalesce(p.name, f.screened_as) as "screenedBy",
     f.tender_id::int as "tenderId", t.code as "tenderCode", (f.closing_at is null or f.closing_at >= now()) as open,
     (select count(*) from tender_found_line l where l.found_id = f.id and l.replaced_at is null)::int as lines,
-    ${TYPE} as type, ${FILES}::int as files, f.details->>'documents_status' as "docsStatus"
+    ${TYPE} as type, ${FILES}::int as files, f.details->>'documents_status' as "docsStatus",
+    (f.source <> 'ps' or f.details ? 'page_read_at' or f.items_text is not null or cardinality(f.molecules) > 0) as read
   from tender_found f left join customer c on c.id = f.agency_id left join person p on p.id = f.screened_by left join tender t on t.id = f.tender_id`;
 
 const VIEW: Record<FoundView, SQL> = {
-  // Opportunities: every tender found that is ours, whatever its state (open or closed, screened, made a
-  // tender): one asking for one of our molecules, or any PS-PhilGEPS tender (the robot reads PS-PhilGEPS's
-  // Bid Match, which the portal itself matched to the company's registered products, as the bidding
-  // system's Bid Match page shows them; most have no lines yet until their papers are read).
-  // "Everything found" adds PhilGEPS's medicine notices that ask for none of ours.
-  opportunities: sql`(cardinality(f.molecules) > 0 or f.source = 'ps')`,
+  // Opportunities: every tender found that asks for one of our molecules (on its page or in its papers),
+  // whatever its state (open or closed, screened, made a tender). The developer, 28 Nov: "we only fetch the
+  // tenders that have a molecule we offer". PS-PhilGEPS's Bid Match holds everything the portal matched to
+  // the company's registered categories (vaccines, dialysis, …): those asking for none of ours, and those
+  // whose page is not read yet, are in "Everything found" only.
+  opportunities: sql`cardinality(f.molecules) > 0`,
   screened: sql`f.screened_at is not null and f.tender_id is null`,
   tenders: sql`f.tender_id is not null`,
   all: sql`true`,

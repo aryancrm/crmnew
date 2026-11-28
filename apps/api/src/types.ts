@@ -6883,6 +6883,8 @@ export type FoundTender = {
   /** How many of its papers are kept or named; and what the robot said of them (pick-up, downloaded, …). */
   files: number;
   docsStatus: string | null;
+  /** Its page was read (always, on PhilGEPS): with no molecule of ours it is "none of ours", else "not read yet". */
+  read: boolean;
 };
 
 /** The bidding system's document chips: all, with papers, pick-up only, none yet. */
