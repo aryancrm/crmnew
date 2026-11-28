@@ -261,9 +261,7 @@ function PsFetch({ way, state, ps, runs }: { way: FoundList["robot"]["fetch"]["w
     ? "PS-PhilGEPS is not connected: this opens its log-in on this laptop first (tick the captcha), then fetches."
     : way === "off"
       ? "The robot can't be started from this server; it still runs by itself every hour."
-      : running?.done
-        ? "Fetched a few minutes ago; it can be pressed again 10 minutes after the last press."
-        : `Reads PS-PhilGEPS now${way === "github" ? " (GitHub runs the robot)" : " (the robot runs on this computer)"}. It takes a few minutes.`;
+      : `Reads PS-PhilGEPS now${way === "github" ? " (GitHub runs the robot)" : " (the robot runs on this computer)"}. It takes a few minutes.`;
   return (
     <div className="mt-2 space-y-2">
       <span className="flex flex-wrap items-center gap-2">
@@ -271,7 +269,7 @@ function PsFetch({ way, state, ps, runs }: { way: FoundList["robot"]["fetch"]["w
           small
           variant="primary"
           title={title}
-          disabled={action.busy || (loggingIn && !quiet) || (connected && (way === "off" || running !== null))}
+          disabled={action.busy || (loggingIn && !quiet) || (connected && (way === "off" || fetching))}
           className="disabled:opacity-50"
           onClick={press}
         >
@@ -333,9 +331,7 @@ function FetchNow({ way, portal, state, runs, blocked }: { way: FoundList["robot
       ? "The robot can't be started from this server; it still runs by itself every hour."
       : blocked
         ? blocked
-        : running?.done
-          ? "Fetched a few minutes ago; it can be pressed again 10 minutes after the last press."
-          : `Reads ${name} now${way === "github" ? " (GitHub runs the robot)" : " (the robot runs on this computer)"}. It takes a few minutes.`;
+        : `Reads ${name} now${way === "github" ? " (GitHub runs the robot)" : " (the robot runs on this computer)"}. It takes a few minutes.`;
   return (
     <span className="mt-2 flex flex-col items-start">
       <span className="flex flex-wrap items-center gap-2">
@@ -343,7 +339,7 @@ function FetchNow({ way, portal, state, runs, blocked }: { way: FoundList["robot
           small
           variant="primary"
           title={title}
-          disabled={action.busy || way === "off" || Boolean(blocked) || running !== null}
+          disabled={action.busy || way === "off" || Boolean(blocked) || waiting}
           className="disabled:opacity-50"
           onClick={() =>
             void action.run(async () => {

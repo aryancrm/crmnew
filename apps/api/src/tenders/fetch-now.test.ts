@@ -112,17 +112,19 @@ describe("Fetch now, one on each portal's card", () => {
     await db.execute(sql`insert into tender_find_run (source, trigger, status, found) values ('philgeps', 'feed', 'success', 450)`);
     await db.execute(sql`insert into tender_find_run (source, trigger, status, found) values ('ps', 'dashboard', 'success', 98)`);
     expect((await state()).philgeps.running?.done).toBe(false);
-    // The run it started comes in: done, and still not pressed again within 10 minutes.
+    // The run it started comes in: done (the status box says how it went), and it can be pressed again at once.
     await db.execute(sql`insert into tender_find_run (source, trigger, status, found) values ('philgeps', 'manual', 'success', 543)`);
     expect((await state()).philgeps.running?.done).toBe(true);
+    expect((await press("jimmy", "philgeps")).status).toBe(200);
+    expect(dispatched).toEqual(["philgeps", "philgeps"]);
+    // That new press waits for its own run.
+    expect((await state()).philgeps.running?.done).toBe(false);
     expect((await press("jimmy", "philgeps")).status).toBe(409);
 
-    // Ten minutes later it can be pressed again.
+    // Ten minutes on, a finished press is no longer shown.
     await db.execute(sql`update tender_find_ask set at = now() - interval '11 minutes'`);
     await db.execute(sql`update tender_find_run set at = now() - interval '5 minutes'`);
     expect((await state()).philgeps.running).toBeNull();
-    expect((await press("jimmy", "philgeps")).status).toBe(200);
-    expect(dispatched).toEqual(["philgeps", "philgeps"]);
   });
 
   it("PS-PhilGEPS waits for a person to connect it, then has its own press beside PhilGEPS's", async () => {

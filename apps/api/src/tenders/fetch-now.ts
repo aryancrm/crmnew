@@ -16,7 +16,7 @@
 // switches them off whatever is set.
 //
 // One press at a time for each portal: while a press waits for its portal's run (45 minutes at most,
-// the workflow's own limit), or within 10 minutes of the last press of that portal, another is refused.
+// the workflow's own limit) another is refused; once the run is in, it can be pressed again at once.
 
 import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -126,10 +126,16 @@ export function useFetchers(fetchers: { dispatch?: (portal: Portal) => Promise<v
 const runAfter = (portal: Portal) =>
   sql`exists (select 1 from tender_find_run r where r.source = ${portal} and r.at > a.at and coalesce(r.trigger, '') not in ('schedule', 'feed'))`;
 
-/** A press of that portal still waiting for its run: asked less than 45 minutes ago, and either within
- *  the last 10 minutes or with no run of it handed in since. */
+/** A press of that portal the page still shows: asked less than 45 minutes ago, and either within the
+ *  last 10 minutes (so the status box can say how its run ended) or with no run of it handed in since. */
 const waiting = (portal: Portal) => sql`a.portal = ${portal} and a.status = 'asked' and a.at > now() - interval '45 minutes'
   and (a.at > now() - interval '10 minutes' or not ${runAfter(portal)})`;
+
+/** A press of that portal whose run has not come in yet (45 minutes at most): only this holds the button.
+ *  Once its run is in, the button can be pressed again at once (the developer, 28 Nov: "free the button
+ *  as soon as the fetch finishes"; before, it rested 10 minutes after every press). */
+const unfinished = (portal: Portal) => sql`a.portal = ${portal} and a.status = 'asked' and a.at > now() - interval '45 minutes'
+  and not ${runAfter(portal)}`;
 
 const iso = (column: string) => sql.raw(`to_char(${column} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`);
 
@@ -194,7 +200,7 @@ export async function fetchNow(db: Database, me: Me, portal: Portal): Promise<{ 
   const [ask] = await rows<{ id: number }>(
     db,
     sql`insert into tender_find_ask (by_person, via, portal)
-      select ${me.id}, ${way}, ${portal} where not exists (select 1 from tender_find_ask a where ${waiting(portal)})
+      select ${me.id}, ${way}, ${portal} where not exists (select 1 from tender_find_ask a where ${unfinished(portal)})
       returning id::int as id`,
   );
   if (!ask) throw new Refusal(409, "fetch_running", "This portal's robot was started a moment ago; its result shows here when it ends.");
