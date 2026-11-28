@@ -448,6 +448,8 @@ const financeApp: Space = {
         { to: "/collect", label: "Due payments", icon: Wallet },
         { to: "/finance/gl", label: "Guarantee letters", icon: HeartHandshake },
         { to: "/purchases/bills?view=open", label: "Supplier bills to pay", icon: Receipt },
+        { to: "/finance/reimbursements", label: "MedRep reimbursements", icon: HandCoins },
+        { to: "/finance/payroll", label: "Payroll to Books", icon: BookOpenCheck },
         { to: "/desk/team?desk=finance", label: "Finance team figures", icon: BarChart3 },
         ...moneyLinks,
       ],
@@ -1553,6 +1555,8 @@ function ownDesk(me: Me): Space {
               // Money going out, every day: refunds owed to customers and suppliers' bills to pay.
               { to: "/refunds", label: "Refunds owed", icon: Undo2, badge: "refunds", short: "Refunds" },
               { to: "/purchases/bills?view=open", label: "Supplier bills to pay", icon: Receipt, short: "Bills" },
+              { to: "/finance/reimbursements", label: "MedRep reimbursements", icon: HandCoins, short: "Reimburse" },
+              { to: "/finance/payroll", label: "Payroll to Books", icon: BookOpenCheck, short: "Payroll GL" },
               { to: "/desk/team", label: "Team figures", icon: BarChart3, short: "Team" },
               folder("Money", Banknote, moneyLinks.filter((link) => link.to !== "/refunds"), "Money"),
               // Unified Books section inside the Finance workspace (no shell-jumping needed).

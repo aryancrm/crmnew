@@ -192,7 +192,10 @@ export async function ledgerChoices(db: Database, me: Me): Promise<LedgerChoices
  *  employee (Employee Reimbursements), with Zoho's own fields. Its tax goes to Tax Payable. */
 export async function createExpense(db: Database, me: Me, input: BookExpenseInput): Promise<{ id: number }> {
   allow(me, LEDGER_ROLES, "record an expense");
-  return db.transaction(async (tx) => {
+  return db.transaction((tx) => insertExpenseTx(tx, me, input));
+}
+
+export async function insertExpenseTx(tx: Runner, me: Me, input: BookExpenseInput): Promise<{ id: number }> {
     const date = day(input.date, "date") as string;
     await assertOpen(tx, "expense", date);
     if (!input.lines?.length) throw new Refusal(400, "invalid", "Add the expense account and amount.", "lines");
@@ -254,7 +257,6 @@ export async function createExpense(db: Database, me: Me, input: BookExpenseInpu
       await plainLine(tx, id, n + 1, { account: line.account, description: line.description, amount: line.amount, taxName: line.tax?.name, taxPct: line.tax?.pct, taxAmount: line.taxAmount });
     await saveDocBirTaxMeta(tx, me, id, { kind: "expense", totalCentavos: total, subTotalCentavos: subTotal, fxRate: 1, partyName: supplier?.name ?? null }, input.birTax);
     return { id };
-  });
 }
 
 // ------------------------------------------------------------------ manual journal
@@ -263,7 +265,10 @@ export async function createExpense(db: Database, me: Me, input: BookExpenseInpu
  *  nothing until it is published; a reverse date makes the opposite journal on that day. */
 export async function createJournal(db: Database, me: Me, input: JournalInput): Promise<{ id: number }> {
   allow(me, LEDGER_ROLES, "make a journal");
-  return db.transaction(async (tx) => {
+  return db.transaction((tx) => insertJournalTx(tx, me, input));
+}
+
+export async function insertJournalTx(tx: Runner, me: Me, input: JournalInput): Promise<{ id: number }> {
     const date = day(input.date, "date") as string;
     await assertOpen(tx, "journal", date);
     const reverseOn = day(input.reverseOn, "reverseOn", false);
@@ -316,7 +321,6 @@ export async function createJournal(db: Database, me: Me, input: JournalInput): 
       });
     if (input.publish && reverseOn) await reverseJournal(tx, me, id, reverseOn);
     return { id };
-  });
 }
 
 /** The opposite of a journal, on its reverse date, pointing back at it. */

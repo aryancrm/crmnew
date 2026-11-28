@@ -22,7 +22,7 @@ import { addBookFile,
 import { accountDetail, accountList, banking } from "./accounts";
 import { insight } from "./insights";
 import { booksDashboard } from "./dashboard";
-import { bankStatement, categorizeLine, finishReconciliation, importStatement, matchLine, reconcileView, setLineStatus, undoReconciliation } from "./bank";
+import { bankStatement, categorizeLine, createBankRule, deleteBankRule, finishReconciliation, importStatement, listBankRules, matchLine, reconcileView, setLineStatus, undoReconciliation } from "./bank";
 import { recurringMade, setRecurringStatus, takeOverRecurring } from "./recurring";
 import {
   bookLocks,
@@ -463,6 +463,29 @@ export function bookActionRoutes(app: Hono<Env>, db: Database): void {
   );
   app.post("/api/books-bank/reconciliation/:id/undo", async (c) => {
     await undoReconciliation(db, me(c), Number(c.req.param("id")));
+    return c.json({ ok: true });
+  });
+  app.get("/api/books-bank/rules", async (c) => c.json(await listBankRules(db, me(c))));
+  app.post("/api/books-bank/rules", async (c) =>
+    c.json(
+      await createBankRule(
+        db,
+        me(c),
+        await readBody(
+          c,
+          z.object({
+            name: z.string().min(1).max(120),
+            pattern: z.string().min(1).max(120),
+            direction: z.enum(["out", "in"]),
+            accountName: NAME,
+            note: TEXT(300),
+          }),
+        ),
+      ),
+    ),
+  );
+  app.delete("/api/books-bank/rules/:id", async (c) => {
+    await deleteBankRule(db, me(c), Number(c.req.param("id")));
     return c.json({ ok: true });
   });
   app.get("/api/books-locks", async (c) => c.json(await bookLocks(db, me(c))));

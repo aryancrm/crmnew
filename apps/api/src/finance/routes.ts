@@ -10,6 +10,7 @@ import { tellCustomer } from "../online/tell";
 import type { ConfirmPaymentInput, PaymentInput, PaymentMethod, RefundInput } from "../types";
 import { financeBoard } from "./board";
 import { confirmGlMark, glMoneyList, markGlMoney, refuseGlMark } from "./gl";
+import { payReimbursements, payrollGlList, postPayrollGl, reimbursementsList } from "./automations";
 import { readCustomerCredit, useCredit } from "./credit";
 import { STAFF_METHODS } from "./rules";
 import {
@@ -275,5 +276,39 @@ export function financeRoutes(
     const input = await readBody(c, z.object({ reason: optional(300) }));
     await removePayment(db, c.get("me"), idParam(c), input.reason ?? null);
     return c.json({ ok: true });
+  });
+
+  // Phase 2 automations: MedRep reimbursements payout + HR Payroll -> Books GL
+  app.get("/api/finance/reimbursements", async (c) => {
+    const view = c.req.query("view") === "paid" ? "paid" : "open";
+    return c.json(await reimbursementsList(db, c.get("me"), view));
+  });
+  app.post("/api/finance/reimbursements/pay", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        ids: z.array(z.number().int().positive()).min(1).max(200),
+        paidThrough: z.string().trim().min(1).max(120),
+        accountName: z.string().trim().min(1).max(120),
+        paidOn: day.optional(),
+        reference: optional(80),
+        note: optional(300),
+      }),
+    );
+    return c.json(await payReimbursements(db, c.get("me"), input));
+  });
+  app.get("/api/finance/payroll-gl", async (c) => c.json(await payrollGlList(db, c.get("me"))));
+  app.post("/api/finance/payroll-gl/:month/post", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        expenseAccount: z.string().trim().min(1).max(120),
+        payableAccount: z.string().trim().min(1).max(120),
+        taxAccount: z.string().trim().min(1).max(120),
+        contribAccount: z.string().trim().min(1).max(120),
+        date: day.optional(),
+      }),
+    );
+    return c.json(await postPayrollGl(db, c.get("me"), c.req.param("month"), input));
   });
 }

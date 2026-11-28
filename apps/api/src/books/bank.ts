@@ -13,7 +13,7 @@ import { allow, Refusal } from "../http";
 import { todayManila } from "../inventory/rules";
 import type { Runner } from "../inventory/service";
 import type { BankEntry, BankLineRow, BankReconcileView, BankStatement, BookExpenseInput, Me } from "../types";
-import { LEDGER_ROLES } from "./accounts";
+import { LEDGER_ROLES, accountNamed } from "./accounts";
 import { day } from "./actions";
 import { createDeposit, createExpense, createTransfer } from "./write";
 
@@ -109,6 +109,16 @@ export async function bankStatement(db: Database, me: Me, account: string, asked
       }
       scored.sort((a, b) => a.tier - b.tier || a.dayGap - b.dayGap || a.feeDiff - b.feeDiff);
       line.suggestions = scored.slice(0, 5).map((s) => s.entry);
+    }
+    const rules = await rows<{ id: number; name: string; pattern: string; direction: "out" | "in"; accountName: string }>(
+      db,
+      sql`select id::int as id, name, pattern, direction, account_name as "accountName" from bank_rule where active order by id`,
+    );
+    for (const line of open) {
+      const hay = `${line.description ?? ""} ${line.reference ?? ""}`.toLowerCase();
+      const dir = line.amount < 0 ? "out" : "in";
+      const matched = rules.find((r) => r.direction === dir && hay.includes(r.pattern.toLowerCase()));
+      if (matched) (line as BankLineRow & { ruleMatch?: typeof matched }).ruleMatch = matched;
     }
   }
   const [booked] = await rows<{ balance: number }>(db, sql`select coalesce(sum(debit - credit), 0)::float8 as balance from book_entry where lower(account) = lower(${name}) and on_date <= ${todayManila()}::date`);
@@ -346,4 +356,37 @@ export async function guardReconciled(tx: Runner, docId: number): Promise<void> 
 }
 export async function freeStatementLine(tx: Runner, docId: number): Promise<void> {
   await tx.execute(sql`update bank_line set status = 'uncategorized', entry_key = null where entry_key = ${`books:${docId}`} and status in ('matched', 'categorized')`);
+}
+
+export async function listBankRules(db: Database, me: Me) {
+  allow(me, LEDGER_ROLES, "see bank rules");
+  return rows<{ id: number; name: string; pattern: string; direction: "out" | "in"; accountName: string; note: string | null }>(
+    db,
+    sql`select id::int as id, name, pattern, direction, account_name as "accountName", note from bank_rule where active order by id desc`,
+  );
+}
+
+export async function createBankRule(
+  db: Database,
+  me: Me,
+  input: { name: string; pattern: string; direction: "out" | "in"; accountName: string; note?: string | null },
+): Promise<{ id: number }> {
+  allow(me, LEDGER_ROLES, "add a bank rule");
+  const name = input.name.trim();
+  const pattern = input.pattern.trim();
+  if (!name) throw new Refusal(400, "invalid", "Give the rule a name.", "name");
+  if (!pattern) throw new Refusal(400, "invalid", "Type the text to match on the bank line.", "pattern");
+  const accountName = await accountNamed(db, input.accountName, "accountName");
+  const [made] = await rows<{ id: number }>(
+    db,
+    sql`insert into bank_rule (name, pattern, direction, account_name, note, created_by)
+        values (${name}, ${pattern}, ${input.direction}, ${accountName}, ${input.note?.trim() || null}, ${me.id})
+        returning id::int as id`,
+  );
+  return { id: made!.id };
+}
+
+export async function deleteBankRule(db: Database, me: Me, id: number): Promise<void> {
+  allow(me, LEDGER_ROLES, "remove a bank rule");
+  await db.execute(sql`update bank_rule set active = false where id = ${id}`);
 }
