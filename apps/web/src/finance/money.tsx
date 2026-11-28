@@ -96,25 +96,39 @@ export function Payments() {
         title="Payments received"
         sub="Money that came in against invoices"
         actions={
-          <div className="flex items-center gap-1 rounded-xl bg-white p-1 shadow-card">
-            <button
-              type="button"
-              aria-label="Month before"
-              className="grid size-8 place-items-center rounded-lg hover:bg-head"
-              onClick={() => set({ month: shiftMonth(data.month, -1) })}
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              to="/books/paymentsreceived/new"
+              className="inline-flex items-center rounded-xl bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-dark"
             >
-              <ChevronLeft size={16} aria-hidden="true" />
-            </button>
-            <span className="min-w-32 text-center text-sm font-semibold">{data.monthLabel}</span>
-            <button
-              type="button"
-              aria-label="Month after"
-              disabled={data.month >= thisMonth}
-              className="grid size-8 place-items-center rounded-lg hover:bg-head disabled:opacity-30"
-              onClick={() => set({ month: shiftMonth(data.month, 1) })}
+              + Record receipt / advance
+            </Link>
+            <Link
+              to="/books/paymentsreceived"
+              className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
             >
-              <ChevronRight size={16} aria-hidden="true" />
-            </button>
+              Historical (Zoho) →
+            </Link>
+            <div className="flex items-center gap-1 rounded-xl bg-white p-1 shadow-card">
+              <button
+                type="button"
+                aria-label="Month before"
+                className="grid size-8 place-items-center rounded-lg hover:bg-head"
+                onClick={() => set({ month: shiftMonth(data.month, -1) })}
+              >
+                <ChevronLeft size={16} aria-hidden="true" />
+              </button>
+              <span className="min-w-32 text-center text-sm font-semibold">{data.monthLabel}</span>
+              <button
+                type="button"
+                aria-label="Month after"
+                disabled={data.month >= thisMonth}
+                className="grid size-8 place-items-center rounded-lg hover:bg-head disabled:opacity-30"
+                onClick={() => set({ month: shiftMonth(data.month, 1) })}
+              >
+                <ChevronRight size={16} aria-hidden="true" />
+              </button>
+            </div>
           </div>
         }
       />

@@ -106,6 +106,14 @@ export function Invoices() {
             </button>
           )
         }
+        actions={
+          <Link
+            to="/books/invoices"
+            className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            Historical (Zoho) →
+          </Link>
+        }
       >
         <Tabs
           value={data.tab}

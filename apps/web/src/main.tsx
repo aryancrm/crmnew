@@ -109,7 +109,7 @@ import { CareGroupsPage } from "./sellers/care-groups";
 import { MtChainsPage, MtListingsPage } from "./sellers/mt";
 import { WorkLogPage, WorkLogsPage } from "./hr/work-log";
 import { PipelinePage, RegistrationsPage, RegulatoryReportPage } from "./regulatory/regulatory";
-import { BooksIndex, BooksShell, InBooks } from "./books/shell";
+import { BooksIndex, BooksShell } from "./books/shell";
 import { BookListPage } from "./books/list";
 import { VendorsPage } from "./books/vendors";
 import { CustomersPage } from "./books/customers";
@@ -203,12 +203,12 @@ createRoot(root).render(
           <Route path="/books" element={<BooksShell />}>
             <Route index element={<BooksIndex />} />
             <Route path="home" element={<BooksHome />} />
-            <Route path="finance/checks" element={<InBooks><OrdersToCheck key="books-finance" desk="finance" /></InBooks>} />
-            <Route path="finance/owed" element={<InBooks><OwedReport /></InBooks>} />
-            <Route path="finance/invoices" element={<InBooks><Invoices /></InBooks>} />
-            <Route path="finance/payments" element={<InBooks><Payments /></InBooks>} />
-            <Route path="finance/refunds" element={<InBooks><Refunds /></InBooks>} />
-            <Route path="finance/returns" element={<InBooks><Returns /></InBooks>} />
+            <Route path="finance/checks" element={<Navigate to="/finance" replace />} />
+            <Route path="finance/owed" element={<Navigate to="/owed" replace />} />
+            <Route path="finance/invoices" element={<Navigate to="/invoices" replace />} />
+            <Route path="finance/payments" element={<Navigate to="/payments" replace />} />
+            <Route path="finance/refunds" element={<Navigate to="/refunds" replace />} />
+            <Route path="finance/returns" element={<Navigate to="/returns" replace />} />
             <Route path="vendors/new" element={<NewVendorPage />} />
             <Route path="purchaseorders/new" element={<NewPurchaseOrderPage />} />
             <Route path="purchaseorders/:id/receive" element={<ReceivePage />} />

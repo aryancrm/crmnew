@@ -425,11 +425,12 @@ const moneyLinks: MenuItem[] = [
 /** Zoho Books' own, moved in (docs/PLAN.md 17): the banks, expenses, journals and the chart of
  *  accounts, for Finance, the CEO and the Admin. */
 const booksLinks: MenuItem[] = [
-  { to: "/books/home", label: "Open Books", icon: BookOpen },
+  { to: "/books/home", label: "Books Home", icon: BookOpen },
   { to: "/books/banking", label: "Banking", icon: Landmark },
   { to: "/books/expenses", label: "Expenses", icon: Receipt },
   { to: "/books/journals", label: "Manual journals", icon: BookOpenCheck },
   { to: "/books/accounts", label: "Chart of accounts", icon: ListTree },
+  { to: "/books/reports", label: "Reports", icon: BarChart3 },
   { to: "/books/locking", label: "Transaction locking", icon: Lock },
   { to: "/books/bir/readiness", label: "BIR & Tax", icon: FileSpreadsheet },
 ];
@@ -1554,8 +1555,8 @@ function ownDesk(me: Me): Space {
               { to: "/purchases/bills?view=open", label: "Supplier bills to pay", icon: Receipt, short: "Bills" },
               { to: "/desk/team", label: "Team figures", icon: BarChart3, short: "Team" },
               folder("Money", Banknote, moneyLinks.filter((link) => link.to !== "/refunds"), "Money"),
-              // Another app, so a link (↗), never a folder: its pages are Books' own menu.
-              { to: "/books/home", label: "Books", icon: Landmark },
+              // Unified Books section inside the Finance workspace (no shell-jumping needed).
+              folder("Books", Landmark, booksLinks.filter((link) => link.to !== "/books/bir/readiness"), "Books"),
               // Straight to Books' BIR & Tax, its Readiness check first (Aryan, 27 Nov).
               { to: "/books/bir/readiness", label: "BIR & Tax", icon: FileSpreadsheet },
             ],

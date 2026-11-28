@@ -56,20 +56,8 @@ const GROUPS: NavGroup[] = [
       { label: "Credit Note Refunds", to: "/books/refunds", ledger: true },
     ],
   },
-  // Finance's own desk (the CRM's invoices, payments, refunds), the same pages, inside Books.
-  {
-    label: "Finance",
-    icon: <HandCoins size={16} />,
-    ledger: true,
-    items: [
-      { label: "Orders to Check", to: "/books/finance/checks" },
-      { label: "Customers Owe", to: "/books/finance/owed" },
-      { label: "CRM Invoices", to: "/books/finance/invoices" },
-      { label: "CRM Payments", to: "/books/finance/payments" },
-      { label: "Refunds Owed", to: "/books/finance/refunds" },
-      { label: "Returns", to: "/books/finance/returns" },
-    ],
-  },
+  // Sales and Finance live in the single Finance workspace in the CRM; Books keeps the ledger
+  // and Zoho-shaped lists without duplicating Finance's desk pages.
   {
     label: "Purchases",
     icon: <ShoppingBag size={16} />,

@@ -6,12 +6,14 @@
 
 import type { BookDoc, BookKind, BookLine, BookLinked } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, FileText, Printer, X } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { ChevronDown, ChevronRight, FileText, Paperclip, Printer, X } from "lucide-react";
+import { type ReactNode, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ApplyToBills, Plain, useMay, VoidBox } from "./forms";
 import { PublishButton, RecurringPanel, RefundBox, useMayLedger } from "./ledger";
 import { api } from "../api";
+import { smaller } from "../photo";
+import { useAction } from "../ui";
 import { downloadBirAsset } from "./bir/shared";
 import { type KindInfo, kindInfo, statusClass, statusText, zDate, zMoney, zQty } from "./kinds";
 
@@ -429,23 +431,7 @@ export function DocView({ info, id, onClose }: { info: KindInfo; id: number; onC
           </div>
         )}
         <Linked docs={doc.linkedDocs} />
-        {(doc.files?.length ?? 0) > 0 && (
-          <div className="rounded-md border border-[#ebeaf2] px-4 py-3">
-            <div className="mb-1 font-medium">Attachments ({doc.files?.length})</div>
-            <ul className="space-y-1">
-              {doc.files?.map((file) => (
-                <li key={file.id} className="flex flex-wrap items-center justify-between gap-2">
-                  <a href={`/api/books/files/${file.id}`} target="_blank" rel="noreferrer" className="text-[#1c5bd9] hover:underline">
-                    {file.name}
-                  </a>
-                  <span className="text-[12px] text-[#6c718a]">
-                    {Math.round(file.size / 1024)} KB{file.uploadedBy ? ` · ${file.uploadedBy}` : ""}{file.uploadedOn ? ` · ${file.uploadedOn}` : ""}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+        <DocFiles doc={doc} kind={info.kind} canUpload={may.bill || may.pay} />
         <article className="mx-auto max-w-[820px] rounded-sm border border-[#ebeaf2] p-8 shadow-[0_0_6px_rgba(0,0,0,0.06)]">
           <div className="flex flex-wrap justify-between gap-6">
             <div>
@@ -678,6 +664,71 @@ function Actions({ doc, may, onBox, go }: { doc: BookDoc; may: ReturnType<typeof
       </button>,
     );
   return <>{buttons}</>;
+}
+
+function DocFiles({ doc, kind, canUpload }: { doc: BookDoc; kind: BookKind; canUpload: boolean }) {
+  const queries = useQueryClient();
+  const action = useAction();
+  const input = useRef<HTMLInputElement>(null);
+  const files = doc.files ?? [];
+  const supportsUpload = ["bill", "vendor_payment", "vendor_credit", "purchase_order", "purchase_receive", "expense"].includes(doc.kind);
+  if (!files.length && !(canUpload && supportsUpload)) return null;
+  return (
+    <div className="rounded-md border border-[#ebeaf2] px-4 py-3">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="font-medium">Attachments{files.length > 0 ? ` (${files.length})` : ""}</span>
+        {canUpload && supportsUpload && (
+          <>
+            <input
+              ref={input}
+              type="file"
+              accept="image/*,application/pdf"
+              multiple
+              className="hidden"
+              onChange={(event) => {
+                const picked = [...(event.target.files ?? [])];
+                event.target.value = "";
+                if (!picked.length) return;
+                void action.run(async () => {
+                  for (const file of picked) {
+                    const form = new FormData();
+                    form.set("file", await smaller(file));
+                    await api(`/api/books/${doc.kind}/${doc.id}/files`, { body: form });
+                  }
+                  await queries.invalidateQueries({ queryKey: ["books", kind, "doc", doc.id] });
+                });
+              }}
+            />
+            <button
+              type="button"
+              disabled={action.busy}
+              onClick={() => input.current?.click()}
+              className="inline-flex items-center gap-1 rounded border border-[#dcdae8] bg-white px-2.5 py-1 text-[12px] font-medium text-[#222536] hover:bg-[#f7f7fe] disabled:opacity-50 print:hidden"
+            >
+              <Paperclip size={13} aria-hidden="true" /> {action.busy ? "Uploading…" : "Attach file"}
+            </button>
+          </>
+        )}
+      </div>
+      {files.length === 0 ? (
+        <p className="text-[12px] text-[#6c718a]">No attachments yet. Upload supplier invoices, receipts, or PDFs here.</p>
+      ) : (
+        <ul className="space-y-1">
+          {files.map((file) => (
+            <li key={file.id}>
+              <a href={`/api/books/files/${file.id}`} target="_blank" rel="noreferrer" className="text-[#1c5bd9] hover:underline">
+                {file.name}
+              </a>
+              <span className="ml-2 text-[12px] text-[#6c718a]">
+                {Math.round(file.size / 1024)} KB{file.uploadedBy ? ` · ${file.uploadedBy}` : ""}{file.uploadedOn ? ` · ${file.uploadedOn}` : ""}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {action.problem && <p className="mt-1 text-[12px] text-rose-700">{action.problem.message}</p>}
+    </div>
+  );
 }
 
 function CancelOrder({ doc, onDone }: { doc: BookDoc; onDone: () => void }) {
